@@ -1,0 +1,13 @@
+# 下载的安装包不入库 (体积大且每次运行自动重新生成)
+downloads/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# 编辑器临时文件
+*.bak
+*.swp
+*~
+.vscode/
+.idea/
