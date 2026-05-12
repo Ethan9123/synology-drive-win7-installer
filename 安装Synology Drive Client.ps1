@@ -308,12 +308,20 @@ Write-Section "Step 2/7  下载 Synology Drive Client (x86)"
 
 $synoArchitecture = "x86"
 $synoVersionOverride = $env:SYNOLOGY_DRIVE_VERSION
+$synoVersionPinned = -not [string]::IsNullOrWhiteSpace($synoVersionOverride)
 $synoCacheOnly = $false
 
 try {
     $synoDownload = Resolve-SynologyDriveClientDownload -Architecture $synoArchitecture -PreferredVersion $synoVersionOverride
 } catch {
     Write-Warn "自动解析 Synology 官方下载地址失败: $($_.Exception.Message)"
+
+    if ($synoVersionPinned) {
+        Write-Err "已指定 SYNOLOGY_DRIVE_VERSION, 无法确认该版本时不会自动改用其他安装包"
+        Write-Info "请检查版本号和网络连接, 或取消 SYNOLOGY_DRIVE_VERSION 后重新运行"
+        Pause-Continue "按回车键退出"
+        exit 1
+    }
 
     $cachedSyno = Find-LocalSynologyInstaller -Directory $WorkDir -Architecture $synoArchitecture
     if ($cachedSyno) {
@@ -348,7 +356,7 @@ if ($synoCacheOnly) {
     $ok = Test-Path $synoLocalPath
 } else {
     $ok = Get-RemoteFile -Url $synoUrl -OutFile $synoLocalPath -Description "Synology Drive Client $synoVersion"
-    if (-not $ok) {
+    if ((-not $ok) -and (-not $synoVersionPinned)) {
         $cachedSyno = Find-LocalSynologyInstaller -Directory $WorkDir -Architecture $synoArchitecture
         if ($cachedSyno) {
             $synoVersion = $cachedSyno.Version

@@ -115,6 +115,7 @@ Q3: 下载速度极慢或失败
        重新运行脚本会自动检测已下载文件
     -> 如需固定 Synology Drive 版本, 可先设置:
        set SYNOLOGY_DRIVE_VERSION=4.0.2-17889
+       固定版本无法确认或下载失败时会直接停止, 不会改装其他版本
 
 Q4: PowerShell 版本太低
     -> Win7 默认 PowerShell 2.0, 建议先装 WMF 5.1:
