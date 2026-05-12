@@ -11,3 +11,6 @@ desktop.ini
 *~
 .vscode/
 .idea/
+
+# Claude Code 本地代理状态
+.claude/
