@@ -31,6 +31,10 @@ if (-not (Test-Path $WorkDir)) {
     New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 }
 
+# 日志记录: 出问题时方便排查
+$logPath = Join-Path $WorkDir ("install-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
+try { Start-Transcript -Path $logPath -Append -ErrorAction Stop | Out-Null } catch { }
+
 # -------------------------------------------------------------
 # 工具函数
 # -------------------------------------------------------------
@@ -75,11 +79,22 @@ function Test-Admin {
 }
 
 # 下载文件: 优先用 BITS, 失败回退到 WebRequest
+function Get-FileSha256Lower {
+    param([string]$Path)
+    try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $stream = [System.IO.File]::OpenRead($Path)
+        try { $bytes = $sha.ComputeHash($stream) } finally { $stream.Close() }
+        return ([BitConverter]::ToString($bytes) -replace '-','').ToLower()
+    } catch { return $null }
+}
+
 function Get-RemoteFile {
     param(
         [string]$Url,
         [string]$OutFile,
-        [string]$Description
+        [string]$Description,
+        [string]$ExpectedSha256 = $null
     )
 
     Write-Step "下载: $Description"
@@ -104,6 +119,15 @@ function Get-RemoteFile {
         if (Test-Path $OutFile) {
             $size = (Get-Item $OutFile).Length
             Write-Step "BITS 下载完成: $([math]::Round($size/1MB, 2)) MB"
+            if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
+                $actualSha256 = Get-FileSha256Lower -Path $OutFile
+                if ([string]::IsNullOrEmpty($actualSha256) -or ($actualSha256.ToLower() -ne $ExpectedSha256.ToLower())) {
+                    try { Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue } catch { }
+                    Write-Err "SHA256 校验失败: $OutFile"
+                    return $false
+                }
+                Write-Step "SHA256 校验通过: $OutFile"
+            }
             return $true
         }
     } catch {
@@ -118,6 +142,15 @@ function Get-RemoteFile {
         if (Test-Path $OutFile) {
             $size = (Get-Item $OutFile).Length
             Write-Step "下载完成: $([math]::Round($size/1MB, 2)) MB"
+            if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
+                $actualSha256 = Get-FileSha256Lower -Path $OutFile
+                if ([string]::IsNullOrEmpty($actualSha256) -or ($actualSha256.ToLower() -ne $ExpectedSha256.ToLower())) {
+                    try { Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue } catch { }
+                    Write-Err "SHA256 校验失败: $OutFile"
+                    return $false
+                }
+                Write-Step "SHA256 校验通过: $OutFile"
+            }
             return $true
         }
     } catch {
@@ -138,9 +171,27 @@ if (-not (Test-Admin)) {
     Write-Err "当前未以管理员身份运行"
     Write-Warn "请关闭此窗口, 右键单击 一键安装.cmd, 选择 [以管理员身份运行]"
     Pause-Continue "按回车键退出"
+    try { Stop-Transcript } catch { }
     exit 1
 }
 Write-Step "管理员权限: 已确认"
+
+# Win7 默认 .NET 不启用 TLS 1.2, 写入注册表让后续 .NET 进程能访问 GitHub / 群晖
+$tlsPaths = @(
+    "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319",
+    "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319"
+)
+foreach ($p in $tlsPaths) {
+    if (Test-Path $p) {
+        try {
+            New-ItemProperty -Path $p -Name "SchUseStrongCrypto" -Value 1 -PropertyType DWord -Force | Out-Null
+            New-ItemProperty -Path $p -Name "SystemDefaultTlsVersions" -Value 1 -PropertyType DWord -Force | Out-Null
+            Write-Step "TLS 1.2 注册表已启用 ($p)"
+        } catch {
+            Write-Warn "TLS 注册表写入失败: $($_.Exception.Message)"
+        }
+    }
+}
 
 # PowerShell 版本
 $psVer = $PSVersionTable.PSVersion
@@ -190,6 +241,7 @@ if (-not $ok) {
     Write-Info "请手动下载后放入 $WorkDir 目录, 然后重新运行本脚本"
     Write-Info "官方地址: https://www.synology.cn/zh-cn/support/download"
     Pause-Continue "按回车键退出"
+    try { Stop-Transcript } catch { }
     exit 1
 }
 
@@ -228,8 +280,9 @@ if (-not $script:SkipVxKex) {
 
     # 备用地址
     if (-not $kexUrl) {
-        $kexFileName = "KexSetup_Release_1_1_3_1763.exe"
-        $kexUrl = "https://github.com/YuZhouRen86/VxKex-NEXT/releases/download/v1.1.3.1763/$kexFileName"
+        # Latest as of 2026-05-12
+        $kexFileName = "KexSetup_Release_1_1_4_2085.exe"
+        $kexUrl = "https://github.com/YuZhouRen86/VxKex-NEXT/releases/download/1.1.4.2085/$kexFileName"
         Write-Warn "使用备用版本: $kexFileName"
     }
 
@@ -240,6 +293,7 @@ if (-not $script:SkipVxKex) {
         Write-Info "请手动下载后放入 $WorkDir 目录:"
         Write-Info "https://github.com/YuZhouRen86/VxKex-NEXT/releases"
         Pause-Continue "按回车键退出"
+        try { Stop-Transcript } catch { }
         exit 1
     }
 } else {
@@ -563,4 +617,5 @@ Write-Host "    $WorkDir" -ForegroundColor Gray
 Write-Host "  可用于其他电脑离线部署 (无需重新下载)" -ForegroundColor Gray
 Write-Host ""
 
+try { Stop-Transcript } catch { }
 exit 0
