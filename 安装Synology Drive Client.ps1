@@ -89,6 +89,45 @@ function Get-FileSha256Lower {
     } catch { return $null }
 }
 
+# 确保 BITS 服务可用 (干净的 Win7 上可能被禁用或停止)
+function Ensure-BitsService {
+    try {
+        $svc = Get-Service -Name BITS -ErrorAction Stop
+        if ($svc.StartType -eq 'Disabled') {
+            try {
+                Set-Service -Name BITS -StartupType Manual -ErrorAction Stop
+                Write-Info "BITS 启动类型已从 Disabled 改为 Manual"
+            } catch {
+                Write-Warn "BITS 服务被禁用且无法修改: $($_.Exception.Message)"
+                return $false
+            }
+        }
+        if ($svc.Status -ne 'Running') {
+            Write-Info "BITS 服务未运行 (当前: $($svc.Status)), 尝试启动..."
+            Start-Service -Name BITS -ErrorAction Stop
+            Start-Sleep -Seconds 1
+            $svc = Get-Service -Name BITS
+        }
+        if ($svc.Status -eq 'Running') {
+            return $true
+        }
+        Write-Warn "BITS 服务无法启动, 将直接使用 Invoke-WebRequest 下载"
+        return $false
+    } catch {
+        Write-Warn "BITS 服务不可用 ($($_.Exception.Message)), 将直接使用 Invoke-WebRequest 下载"
+        return $false
+    }
+}
+
+# 把 GitHub 直链转成大陆可访问的镜像 (用于直接 GitHub 失败时回退)
+function ConvertTo-GitHubMirrorUrl {
+    param([string]$Url)
+    if ($Url -match '^https?://(github\.com|raw\.githubusercontent\.com|gist\.github\.com|gist\.githubusercontent\.com|codeload\.github\.com|objects\.githubusercontent\.com)/') {
+        return "https://gh-proxy.com/$Url"
+    }
+    return $null
+}
+
 function Get-RemoteFile {
     param(
         [string]$Url,
@@ -111,31 +150,33 @@ function Get-RemoteFile {
         }
     }
 
-    # 尝试 BITS 传输
-    try {
-        Import-Module BitsTransfer -ErrorAction Stop
-        Start-BitsTransfer -Source $Url -Destination $OutFile `
-            -DisplayName $Description -Description "Synology Drive 安装工具下载"
-        if (Test-Path $OutFile) {
-            $size = (Get-Item $OutFile).Length
-            Write-Step "BITS 下载完成: $([math]::Round($size/1MB, 2)) MB"
-            if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
-                $actualSha256 = Get-FileSha256Lower -Path $OutFile
-                if ([string]::IsNullOrEmpty($actualSha256) -or ($actualSha256.ToLower() -ne $ExpectedSha256.ToLower())) {
-                    try { Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue } catch { }
-                    Write-Err "SHA256 校验失败: $OutFile"
-                    return $false
+    # 尝试 BITS 传输 (前提是 BITS 服务可用)
+    if (Ensure-BitsService) {
+        try {
+            Import-Module BitsTransfer -ErrorAction Stop
+            Start-BitsTransfer -Source $Url -Destination $OutFile `
+                -DisplayName $Description -Description "Synology Drive 安装工具下载"
+            if (Test-Path $OutFile) {
+                $size = (Get-Item $OutFile).Length
+                Write-Step "BITS 下载完成: $([math]::Round($size/1MB, 2)) MB"
+                if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
+                    $actualSha256 = Get-FileSha256Lower -Path $OutFile
+                    if ([string]::IsNullOrEmpty($actualSha256) -or ($actualSha256.ToLower() -ne $ExpectedSha256.ToLower())) {
+                        try { Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue } catch { }
+                        Write-Err "SHA256 校验失败: $OutFile"
+                        return $false
+                    }
+                    Write-Step "SHA256 校验通过: $OutFile"
                 }
-                Write-Step "SHA256 校验通过: $OutFile"
+                return $true
             }
-            return $true
+        } catch {
+            Write-Warn "BITS 下载失败: $($_.Exception.Message)"
+            Write-Info "尝试备用方式..."
         }
-    } catch {
-        Write-Warn "BITS 下载失败: $($_.Exception.Message)"
-        Write-Info "尝试备用方式..."
     }
 
-    # 回退: Invoke-WebRequest
+    # 回退 1: Invoke-WebRequest 直连
     try {
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -TimeoutSec 300
@@ -154,7 +195,35 @@ function Get-RemoteFile {
             return $true
         }
     } catch {
-        Write-Err "下载失败: $($_.Exception.Message)"
+        Write-Warn "直连下载失败: $($_.Exception.Message)"
+    }
+
+    # 回退 2: 如果是 GitHub 链接, 通过国内镜像再试 (gh-proxy.com)
+    $mirrorUrl = ConvertTo-GitHubMirrorUrl -Url $Url
+    if ($mirrorUrl) {
+        Write-Info "尝试 GitHub 镜像: $mirrorUrl"
+        try {
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $mirrorUrl -OutFile $OutFile -UseBasicParsing -TimeoutSec 300
+            if (Test-Path $OutFile) {
+                $size = (Get-Item $OutFile).Length
+                Write-Step "镜像下载完成: $([math]::Round($size/1MB, 2)) MB"
+                if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
+                    $actualSha256 = Get-FileSha256Lower -Path $OutFile
+                    if ([string]::IsNullOrEmpty($actualSha256) -or ($actualSha256.ToLower() -ne $ExpectedSha256.ToLower())) {
+                        try { Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue } catch { }
+                        Write-Err "SHA256 校验失败: $OutFile"
+                        return $false
+                    }
+                    Write-Step "SHA256 校验通过: $OutFile"
+                }
+                return $true
+            }
+        } catch {
+            Write-Err "镜像下载失败: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Err "下载失败 (非 GitHub 链接, 无镜像可用)"
     }
 
     return $false
@@ -211,6 +280,9 @@ Write-Info "内部版本号: $osVersion"
 $isWin7 = ($osVersion -like "6.1*")
 if ($isWin7) {
     Write-Step "已识别为 Windows 7, 需要 VxKex-NEXT 兼容层"
+    Write-Info "提示: 干净的 Win7 SP1 需要先装 KB4474419 (SHA-2 签名支持),"
+    Write-Info "      否则新版安装包的数字签名无法验证。"
+    Write-Info "下载: https://www.catalog.update.microsoft.com/Search.aspx?q=KB4474419"
 } else {
     Write-Warn "当前系统不是 Win7, 可能不需要安装 VxKex-NEXT"
     $ans = Read-Host "是否仍要继续完整流程? (Y=继续 / N=只装 Synology Drive)"

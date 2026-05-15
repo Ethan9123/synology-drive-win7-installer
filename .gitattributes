@@ -1,0 +1,34 @@
+# =============================================================
+# Line ending policy
+# -------------------------------------------------------------
+# 本项目目标平台是中文 Windows 7, .cmd 必须 CRLF (否则 cmd.exe
+# 解析 @echo off 失败), .ps1 在 Windows 上也应是 CRLF。
+# 这里强制存储行结尾, 绕过 core.autocrlf 在不同机器上行为不一致
+# 的问题。
+# =============================================================
+
+# Auto-detect text/binary by default
+* text=auto
+
+# Windows scripts MUST be CRLF — cmd.exe and PowerShell on Win7
+# parse incorrectly with LF
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+*.psm1      text eol=crlf
+*.psd1      text eol=crlf
+*.ps1xml    text eol=crlf
+
+# Chinese/English plain text — Notepad on Win7 prefers CRLF
+*.txt       text eol=crlf
+*.md        text eol=crlf
+
+# Treat these as binary so Git never line-ending-rewrites them
+*.exe       binary
+*.msi       binary
+*.dll       binary
+*.7z        binary
+*.zip       binary
+*.png       binary
+*.jpg       binary
+*.ico       binary
