@@ -1,10 +1,10 @@
-﻿================================================================
+================================================================
    Synology Drive Client 一键安装工具 - 使用说明
 ================================================================
 
 【目的】
    在不支持的旧版 Windows (主要是 Win7) 上, 自动安装并配置
-   最新版 Synology Drive Client。
+   Synology 官方归档中的最新版 Synology Drive Client。
 
 【适用范围】
    - Windows 7 (32位 / 64位) - 主要目标
@@ -45,7 +45,7 @@
 
 【第四步】按提示完成
    脚本会自动:
-   - 下载 Synology Drive (官网, 约 100 MB)
+   - 解析并下载 Synology Drive 最新 x86 安装包 (官网, 约 70 MB)
    - 下载 VxKex-NEXT (GitHub, 约 5 MB)
    - 启动 VxKex 安装程序 (需手动点几下 Next)
    - 启动 Synology Drive 安装程序 (需手动点几下下一步)
@@ -109,10 +109,13 @@ Q2: 提示 "无法加载脚本因为禁止运行脚本"
        右键 cmd 选 [以管理员身份运行]
 
 Q3: 下载速度极慢或失败
-    -> 国内访问 GitHub 不稳定, 可手动下载放入 downloads 文件夹:
-       Synology Drive: https://www.synology.cn/zh-cn/support/download
+    -> 可手动下载放入 downloads 文件夹:
+       Synology Drive: https://archive.synology.com/download/Utility/SynologyDriveClient
        VxKex-NEXT:    https://github.com/YuZhouRen86/VxKex-NEXT/releases
        重新运行脚本会自动检测已下载文件
+    -> 如需固定 Synology Drive 版本, 可先设置:
+       set SYNOLOGY_DRIVE_VERSION=4.0.2-17889
+       固定版本无法确认或下载失败时会直接停止, 不会改装其他版本
 
 Q4: PowerShell 版本太低
     -> Win7 默认 PowerShell 2.0, 建议先装 WMF 5.1:
@@ -142,6 +145,7 @@ Q7: 想批量部署到多台电脑
 ================================================================
 
 会做:
+   [√] 自动解析 Synology 官方归档中的最新 x86 安装包
    [√] 通过 BITS 服务 (系统自带) 下载官方安装包
    [√] 启动 VxKex-NEXT 官方安装程序
    [√] 启动 Synology Drive 官方安装程序
@@ -153,7 +157,7 @@ Q7: 想批量部署到多台电脑
    [×] 不修改 HKLM 注册表启动项
    [×] 不写计划任务
    [×] 不上传/收集任何数据
-   [×] 不调用网络 API (除 GitHub releases API 查询版本号)
+   [×] 不调用无关网络 API (仅访问 Synology 官方归档和 GitHub releases)
    [×] 不自动写入 VxKex 注册表 (避免被杀毒拦截)
 
 ================================================================
@@ -181,6 +185,6 @@ Q7: 想批量部署到多台电脑
 
 原始解决方案: https://zhugh.com/synology/ (作者: zhugh)
 VxKex-NEXT  : https://github.com/YuZhouRen86/VxKex-NEXT
-Synology    : https://www.synology.cn/zh-cn/support/download
+Synology    : https://archive.synology.com/download/Utility/SynologyDriveClient
 
 整理日期: 2026-05-12

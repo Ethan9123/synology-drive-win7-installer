@@ -78,6 +78,135 @@ function Test-Admin {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+$SynologyArchiveRoot = "https://archive.synology.com/download/Utility/SynologyDriveClient"
+$SynologyDownloadRoot = "https://global.synologydownload.com"
+
+function New-SynologyVersionRecord {
+    param(
+        [string]$Version,
+        [object]$File = $null
+    )
+
+    if ($Version -notmatch '^(\d+)\.(\d+)\.(\d+)-(\d+)$') {
+        return $null
+    }
+
+    New-Object PSObject -Property @{
+        Version = $Version
+        Major   = [int]$Matches[1]
+        Minor   = [int]$Matches[2]
+        Patch   = [int]$Matches[3]
+        Build   = [int]$Matches[4]
+        File    = $File
+    }
+}
+
+function Find-LocalSynologyInstaller {
+    param(
+        [string]$Directory,
+        [string]$Architecture = "x86"
+    )
+
+    if (-not (Test-Path $Directory)) {
+        return $null
+    }
+
+    $pattern = "^Synology Drive Client-(\d+\.\d+\.\d+-\d+)-$([regex]::Escape($Architecture))\.exe$"
+    $records = @()
+
+    $files = Get-ChildItem -Path $Directory -Filter "Synology Drive Client-*-$Architecture.exe" -ErrorAction SilentlyContinue
+    foreach ($file in $files) {
+        if ($file.Length -le 1MB) { continue }
+        if ($file.Name -match $pattern) {
+            $record = New-SynologyVersionRecord -Version $Matches[1] -File $file
+            if ($record) { $records += $record }
+        }
+    }
+
+    if ($records.Count -eq 0) {
+        return $null
+    }
+
+    return $records | Sort-Object -Property Major,Minor,Patch,Build -Descending | Select-Object -First 1
+}
+
+function Resolve-SynologyDriveClientDownload {
+    param(
+        [string]$Architecture = "x86",
+        [string]$PreferredVersion = $null
+    )
+
+    $version = $null
+
+    if (-not [string]::IsNullOrWhiteSpace($PreferredVersion)) {
+        $PreferredVersion = $PreferredVersion.Trim()
+        $record = New-SynologyVersionRecord -Version $PreferredVersion
+        if (-not $record) {
+            throw "指定的 Synology Drive 版本格式无效: $PreferredVersion"
+        }
+        $version = $PreferredVersion
+        Write-Warn "使用环境变量指定版本: $version"
+    } else {
+        Write-Step "查询 Synology 官方归档中的最新 Windows 客户端版本..."
+        $index = Invoke-WebRequest -Uri $SynologyArchiveRoot -UseBasicParsing -TimeoutSec 60
+
+        $seen = @{}
+        $records = @()
+        foreach ($match in [regex]::Matches($index.Content, 'SynologyDriveClient/(\d+\.\d+\.\d+-\d+)')) {
+            $candidate = $match.Groups[1].Value
+            if ($seen.ContainsKey($candidate)) { continue }
+            $seen[$candidate] = $true
+
+            $record = New-SynologyVersionRecord -Version $candidate
+            if ($record) { $records += $record }
+        }
+
+        if ($records.Count -eq 0) {
+            throw "未能从 Synology 官方归档解析版本列表"
+        }
+
+        $latest = $records | Sort-Object -Property Major,Minor,Patch,Build -Descending | Select-Object -First 1
+        $version = $latest.Version
+        Write-Step "解析到最新版本: $version"
+    }
+
+    $fileName = "Synology Drive Client-$version-$Architecture.exe"
+    $encodedFileName = [System.Uri]::EscapeDataString($fileName)
+    $versionUrl = "$SynologyArchiveRoot/$version"
+
+    Write-Step "确认 $Architecture 安装包存在..."
+    $versionPage = Invoke-WebRequest -Uri $versionUrl -UseBasicParsing -TimeoutSec 60
+    $hasPlainName = $versionPage.Content -match [regex]::Escape($fileName)
+    $hasEncodedName = $versionPage.Content -match [regex]::Escape($encodedFileName)
+    if (-not ($hasPlainName -or $hasEncodedName)) {
+        throw "Synology 版本 $version 未找到 $Architecture exe 安装包"
+    }
+
+    $assetUrl = $null
+    $assetPattern = 'href="([^"]*(' + [regex]::Escape($encodedFileName) + '|' + [regex]::Escape($fileName) + ')[^"]*)"'
+    $assetMatch = [regex]::Match($versionPage.Content, $assetPattern)
+    if ($assetMatch.Success) {
+        $assetUrl = $assetMatch.Groups[1].Value.Replace('&amp;', '&')
+        if ($assetUrl -match '^//') {
+            $assetUrl = "https:$assetUrl"
+        } elseif ($assetUrl -match '^/') {
+            $assetUrl = "https://archive.synology.com$assetUrl"
+        } elseif ($assetUrl -notmatch '^https?://') {
+            $assetUrl = "$versionUrl/$assetUrl"
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($assetUrl)) {
+        $assetUrl = "$SynologyDownloadRoot/download/Utility/SynologyDriveClient/$version/$encodedFileName"
+    }
+
+    New-Object PSObject -Property @{
+        Version   = $version
+        FileName  = $fileName
+        Url       = $assetUrl
+        LocalPath = Join-Path $WorkDir $fileName
+    }
+}
+
 # 下载文件: 优先用 BITS, 失败回退到 WebRequest
 function Get-FileSha256Lower {
     param([string]$Path)
@@ -300,14 +429,68 @@ Write-Step "工作目录: $WorkDir"
 
 Write-Section "Step 2/7  下载 Synology Drive Client (x86)"
 
-# Synology 官方下载地址 (x86 / 32 位版本)
-# 版本号写在变量里, 方便后续升级
-$synoVersion = "4.0.2-17886"
-$synoFileName = "Synology Drive Client-${synoVersion}-x86.exe"
-$synoUrl = "https://global.download.synology.com/download/Tools/SynologyDriveClient/${synoVersion}/Windows/x86/${synoFileName}"
-$synoLocalPath = Join-Path $WorkDir $synoFileName
+$synoArchitecture = "x86"
+$synoVersionOverride = $env:SYNOLOGY_DRIVE_VERSION
+$synoVersionPinned = -not [string]::IsNullOrWhiteSpace($synoVersionOverride)
+$synoCacheOnly = $false
 
-$ok = Get-RemoteFile -Url $synoUrl -OutFile $synoLocalPath -Description "Synology Drive Client $synoVersion"
+try {
+    $synoDownload = Resolve-SynologyDriveClientDownload -Architecture $synoArchitecture -PreferredVersion $synoVersionOverride
+} catch {
+    Write-Warn "自动解析 Synology 官方下载地址失败: $($_.Exception.Message)"
+
+    if ($synoVersionPinned) {
+        Write-Err "已指定 SYNOLOGY_DRIVE_VERSION, 无法确认该版本时不会自动改用其他安装包"
+        Write-Info "请检查版本号和网络连接, 或取消 SYNOLOGY_DRIVE_VERSION 后重新运行"
+        Pause-Continue "按回车键退出"
+        exit 1
+    }
+
+    $cachedSyno = Find-LocalSynologyInstaller -Directory $WorkDir -Architecture $synoArchitecture
+    if ($cachedSyno) {
+        $synoDownload = New-Object PSObject -Property @{
+            Version   = $cachedSyno.Version
+            FileName  = $cachedSyno.File.Name
+            Url       = $null
+            LocalPath = $cachedSyno.File.FullName
+        }
+        $synoCacheOnly = $true
+        Write-Step "使用本地缓存安装包: $($cachedSyno.File.Name)"
+    } else {
+        # 官方归档结构变化或临时不可达时的兜底版本。
+        $fallbackVersion = "4.0.2-17889"
+        $fallbackFileName = "Synology Drive Client-$fallbackVersion-$synoArchitecture.exe"
+        $synoDownload = New-Object PSObject -Property @{
+            Version   = $fallbackVersion
+            FileName  = $fallbackFileName
+            Url       = "$SynologyDownloadRoot/download/Utility/SynologyDriveClient/$fallbackVersion/$([System.Uri]::EscapeDataString($fallbackFileName))"
+            LocalPath = Join-Path $WorkDir $fallbackFileName
+        }
+        Write-Warn "改用已知官方兜底版本: $fallbackVersion"
+    }
+}
+
+$synoVersion = $synoDownload.Version
+$synoFileName = $synoDownload.FileName
+$synoUrl = $synoDownload.Url
+$synoLocalPath = $synoDownload.LocalPath
+
+if ($synoCacheOnly) {
+    $ok = Test-Path $synoLocalPath
+} else {
+    $ok = Get-RemoteFile -Url $synoUrl -OutFile $synoLocalPath -Description "Synology Drive Client $synoVersion"
+    if ((-not $ok) -and (-not $synoVersionPinned)) {
+        $cachedSyno = Find-LocalSynologyInstaller -Directory $WorkDir -Architecture $synoArchitecture
+        if ($cachedSyno) {
+            $synoVersion = $cachedSyno.Version
+            $synoFileName = $cachedSyno.File.Name
+            $synoLocalPath = $cachedSyno.File.FullName
+            $ok = $true
+            Write-Warn "下载失败, 改用本地缓存安装包: $synoFileName"
+        }
+    }
+}
+
 if (-not $ok) {
     Write-Err "Synology Drive 下载失败"
     Write-Info "请手动下载后放入 $WorkDir 目录, 然后重新运行本脚本"
