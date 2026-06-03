@@ -109,10 +109,15 @@ Q2: 提示 "无法加载脚本因为禁止运行脚本"
        右键 cmd 选 [以管理员身份运行]
 
 Q3: 下载速度极慢或失败
-    -> 国内访问 GitHub 不稳定, 可手动下载放入 downloads 文件夹:
-       Synology Drive: https://www.synology.cn/zh-cn/support/download
-       VxKex-NEXT:    https://github.com/YuZhouRen86/VxKex-NEXT/releases
-       重新运行脚本会自动检测已下载文件
+    -> 国内访问 GitHub 不稳定, 可在另一台电脑下载后放入 downloads 文件夹,
+       重新运行脚本会自动检测已下载文件并跳过下载。
+       脚本失败时会直接打印出"期望文件名"和"直链", 照着下载即可。
+
+       Synology Drive (版本列表, 选最新或 4.0.2-17889):
+         https://archive.synology.com/download/Utility/SynologyDriveClient
+         注意: 32 位在 Installer/i686/ 目录, 文件名后缀是 -x86
+       VxKex-NEXT (下 KexSetup_Release_ 开头的, 别下 Debug):
+         https://github.com/YuZhouRen86/VxKex-NEXT/releases/latest
 
 Q4: PowerShell 版本太低
     -> Win7 默认 PowerShell 2.0, 建议先装 WMF 5.1:
@@ -169,6 +174,17 @@ Q7: 想批量部署到多台电脑
 为什么 32 位 (x86) 而不是 64 位?
    实测在 Win7 上 32 位版兼容性更稳定, 即便系统是 64 位 Win7,
    也建议使用 x86 安装包。
+   官方下载路径: 32 位在 .../Windows/Installer/i686/ (后缀 -x86),
+                64 位在 .../Windows/Installer/x86_64/ (后缀 -x64)。
+
+默认装哪个版本? 怎么升级?
+   脚本默认装 Synology Drive Client 4.0.3-17892 (截至 2026-06 最新)。
+   升级只需改脚本顶部的 $synoVersion 变量, 版本号见:
+     https://archive.synology.com/download/Utility/SynologyDriveClient
+   VxKex 始终运行时抓 GitHub 最新版 (备用 1.1.4.2085)。
+
+   版本配对提示: 原始方案在 4.0.1 / 4.0.2 实测通过。若最新版配置完
+   VxKex 仍打不开, 把 $synoVersion 回退到 4.0.2-17889 再试。
 
 为什么不能完全自动化?
    - VxKex 注册表项格式因版本而异, 直接写注册表风险高
@@ -181,6 +197,7 @@ Q7: 想批量部署到多台电脑
 
 原始解决方案: https://zhugh.com/synology/ (作者: zhugh)
 VxKex-NEXT  : https://github.com/YuZhouRen86/VxKex-NEXT
-Synology    : https://www.synology.cn/zh-cn/support/download
+Synology 版本列表: https://archive.synology.com/download/Utility/SynologyDriveClient
+Synology 官网下载: https://www.synology.cn/zh-cn/support/download
 
-整理日期: 2026-05-12
+整理日期: 2026-06-03

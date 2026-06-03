@@ -17,12 +17,18 @@ try {
 } catch { }
 
 # 启用 TLS 1.2 (访问 GitHub / Synology 必需)
+# 先试枚举名; 老版本 .NET (3.5) 上 Tls12 枚举未定义会抛异常, 再退回数值 3072
 try {
     [Net.ServicePointManager]::SecurityProtocol = `
         [Net.SecurityProtocolType]::Tls12 -bor `
         [Net.SecurityProtocolType]::Tls11 -bor `
         [Net.SecurityProtocolType]::Tls
-} catch { }
+} catch {
+    try {
+        # 3072 = Tls12, 768 = Tls11, 192 = Tls10 (按位或)
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType](3072 -bor 768 -bor 192)
+    } catch { }
+}
 
 # 工作目录: 安装包所在文件夹
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -298,20 +304,33 @@ Write-Step "工作目录: $WorkDir"
 # 第 2 步: 下载 Synology Drive Client
 # -------------------------------------------------------------
 
-Write-Section "Step 2/7  下载 Synology Drive Client (x86)"
+Write-Section "Step 2/7  下载 Synology Drive Client (x86, 最新版)"
 
-# Synology 官方下载地址 (x86 / 32 位版本)
-# 版本号写在变量里, 方便后续升级
-$synoVersion = "4.0.2-17886"
-$synoFileName = "Synology Drive Client-${synoVersion}-x86.exe"
-$synoUrl = "https://global.download.synology.com/download/Tools/SynologyDriveClient/${synoVersion}/Windows/x86/${synoFileName}"
+# Synology 官方下载地址 (默认 x86 / 32 位版本)
+# ---- 升级方法: 只改下面这一个版本号即可 ----
+# 最新版本号见: https://archive.synology.com/download/Utility/SynologyDriveClient
+# 经验证可在 Win7 + VxKex 上工作; 若最新版无法启动, 可回退到 4.0.2-17889
+$synoVersion = "4.0.3-17892"
+
+# 架构: i686 = 32位(文件名后缀 x86), x86_64 = 64位(文件名后缀 x64)
+# Win7 + VxKex 上 32 位兼容性更稳, 即使系统是 64 位也建议用 x86
+$synoArchFolder = "i686"
+$synoArchSuffix = "x86"
+
+$synoFileName = "Synology Drive Client-${synoVersion}-${synoArchSuffix}.exe"
+# URL 中的空格必须编码为 %20 (本地文件名保留真实空格)
+$synoUrlFileName = $synoFileName -replace ' ', '%20'
+$synoUrl = "https://global.synologydownload.com/download/Utility/SynologyDriveClient/${synoVersion}/Windows/Installer/${synoArchFolder}/${synoUrlFileName}"
 $synoLocalPath = Join-Path $WorkDir $synoFileName
 
 $ok = Get-RemoteFile -Url $synoUrl -OutFile $synoLocalPath -Description "Synology Drive Client $synoVersion"
 if (-not $ok) {
     Write-Err "Synology Drive 下载失败"
-    Write-Info "请手动下载后放入 $WorkDir 目录, 然后重新运行本脚本"
-    Write-Info "官方地址: https://www.synology.cn/zh-cn/support/download"
+    Write-Warn "请在另一台能上网的电脑下载, 拷贝到本机的 downloads 目录后重新运行:"
+    Write-Info "目标目录 : $WorkDir"
+    Write-Info "期望文件名: $synoFileName"
+    Write-Info "直链下载 : $synoUrl"
+    Write-Info "版本列表 : https://archive.synology.com/download/Utility/SynologyDriveClient"
     Pause-Continue "按回车键退出"
     try { Stop-Transcript } catch { }
     exit 1
@@ -336,8 +355,11 @@ if (-not $script:SkipVxKex) {
         $release = Invoke-RestMethod -Uri $apiUrl -UseBasicParsing -TimeoutSec 30
         Write-Info "最新版本: $($release.tag_name)"
 
-        # 优先选择 KexSetup_Release_*.exe
-        $asset = $release.assets | Where-Object { $_.name -match "KexSetup.*\.exe$" } | Select-Object -First 1
+        # 必须优先选 Release 版 (API 返回顺序是 Debug 在前, 直接 -First 1 会错拿 Debug)
+        $asset = $release.assets | Where-Object { $_.name -match "KexSetup_Release.*\.exe$" } | Select-Object -First 1
+        if (-not $asset) {
+            $asset = $release.assets | Where-Object { $_.name -match "KexSetup.*\.exe$" } | Select-Object -First 1
+        }
         if (-not $asset) {
             $asset = $release.assets | Where-Object { $_.name -like "*.exe" } | Select-Object -First 1
         }
@@ -361,9 +383,13 @@ if (-not $script:SkipVxKex) {
     $kexLocalPath = Join-Path $WorkDir $kexFileName
     $ok = Get-RemoteFile -Url $kexUrl -OutFile $kexLocalPath -Description "VxKex-NEXT"
     if (-not $ok) {
-        Write-Err "VxKex-NEXT 下载失败"
-        Write-Info "请手动下载后放入 $WorkDir 目录:"
-        Write-Info "https://github.com/YuZhouRen86/VxKex-NEXT/releases"
+        Write-Err "VxKex-NEXT 下载失败 (国内访问 GitHub 常不稳定)"
+        Write-Warn "请在另一台电脑下载, 拷贝到本机的 downloads 目录后重新运行:"
+        Write-Info "目标目录 : $WorkDir"
+        Write-Info "期望文件名: $kexFileName"
+        Write-Info "直链下载 : $kexUrl"
+        Write-Info "发布页面 : https://github.com/YuZhouRen86/VxKex-NEXT/releases/latest"
+        Write-Info "注意: 请下载 KexSetup_Release_ 开头的文件, 不要下 Debug 版"
         Pause-Continue "按回车键退出"
         try { Stop-Transcript } catch { }
         exit 1
