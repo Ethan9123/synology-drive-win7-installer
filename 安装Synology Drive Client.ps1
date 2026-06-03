@@ -686,6 +686,9 @@ if (-not $synoExe) {
                 Write-Info "可能原因:"
                 Write-Info "  - VxKex 未配置好 bin 目录下所有 exe"
                 Write-Info "  - 程序启动失败 (重启电脑后再试)"
+                Write-Host ""
+                Write-Warn "请运行 [诊断启动问题.cmd] 自动定位根因"
+                Write-Info "它会逐个检查每个 exe 是否被 VxKex 接管, 并扫描事件日志"
             }
         } catch {
             Write-Err "启动失败: $($_.Exception.Message)"

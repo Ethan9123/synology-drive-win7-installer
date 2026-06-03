@@ -16,6 +16,8 @@
    安装Synology Drive Client.ps1    - 主安装脚本 (PowerShell)
    检查开机自启动.cmd                - 独立检查/修复自启动状态
    verify-autostart.ps1             - 自启动检查脚本
+   诊断启动问题.cmd                  - 装完打不开时, 定位启动失败根因
+   diagnose-launch.ps1              - 启动诊断脚本
    使用说明.txt                      - 本文件
    downloads/                        - 安装包下载目录 (运行后生成)
 
@@ -123,10 +125,16 @@ Q4: PowerShell 版本太低
     -> Win7 默认 PowerShell 2.0, 建议先装 WMF 5.1:
        https://www.microsoft.com/en-us/download/details.aspx?id=54616
 
-Q5: 安装完依然报 "缺少 api-ms-win-crt-runtime-l1-1-0.dll"
-    -> 检查 VxKex 中是否已添加 bin 目录下 *所有* exe 文件
-    -> 重启电脑后再试
-    -> 确认下载的是 x86 版本, 不是 x64
+Q5: 安装完依然报 "缺少 api-ms-win-crt-runtime-l1-1-0.dll" / 打不开
+    -> 直接双击 [诊断启动问题.cmd], 它会自动告诉你哪个 exe 没被
+       VxKex 接管 (这是最常见原因), 并给出修复步骤
+    -> 手动排查的话:
+       - 检查 VxKex 中是否已添加 bin 目录下 *所有* exe 文件
+         (漏一个都可能导致主程序连锁起不来)
+       - 重启电脑后再试
+       - 确认下载的是 x86 版本, 不是 x64
+       - 仍不行: 在 VxKex 给 SynologyDrive.exe 开 Win10 版本伪装,
+         或把安装脚本的 $synoVersion 回退到 4.0.2-17889
 
 Q6: 360 报木马 / 病毒
     -> 这是误报。本工具源码完全可见, 行为透明:

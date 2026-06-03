@@ -28,6 +28,8 @@
 | `安装Synology Drive Client.ps1` | 7 步自动化安装脚本（PowerShell） |
 | `检查开机自启动.cmd` | 独立的自启状态检查 / 修复工具 |
 | `verify-autostart.ps1` | 自启检查脚本（被 .cmd 调用） |
+| `诊断启动问题.cmd` | 装完打不开时用——定位启动失败根因 |
+| `diagnose-launch.ps1` | 启动诊断脚本（被 .cmd 调用） |
 | `使用说明.txt` | 完整文档 + FAQ + 故障排查 |
 | `downloads/` | 安装包缓存（运行后生成，可批量部署复用） |
 
@@ -127,6 +129,17 @@ VxKex-NEXT 通过 IFEO（Image File Execution Options）钩子工作——只要
 
 ---
 
+## 装完打不开？用诊断工具
+
+双击 **`诊断启动问题.cmd`**（无需管理员），它会自动定位根因：
+
+1. 确认 `SynologyDrive.exe` 与 VxKex 是否都装好
+2. **逐个检查 bin 下每个 exe 是否被 VxKex 接管**（读 IFEO 注册表的 `VerifierDlls` + `GlobalFlag` 0x100 位）——漏加任何一个 exe 都可能导致主程序连锁起不来，这是最常见的失败原因
+3. 实际启动一次，失败则扫描应用程序事件日志，打印出 faulting module / 缺失的 DLL
+4. 按优先级给出针对性修复建议
+
+> VxKex NEXT 的工作方式：通过 IFEO 把自己的兼容层 DLL（`VerifierDlls`）注入到目标 exe。所以"某个 exe 没被接管"＝"它会因缺少 `api-ms-win-crt-*.dll` 而启动失败"。诊断工具正是逐个核对这一点。
+
 ## 故障排查
 
 详见 [使用说明.txt](使用说明.txt) 的「故障排查」章节。常见问题：
@@ -134,7 +147,7 @@ VxKex-NEXT 通过 IFEO（Image File Execution Options）钩子工作——只要
 - 双击 cmd 闪退 → 360 拦截 PowerShell，先暂停 360
 - "无法加载脚本" → 已有 `-ExecutionPolicy Bypass`，确认是否以管理员运行
 - 下载失败 → 国内 GitHub 不稳定，手动放 `downloads/` 后重跑脚本
-- 装完仍报缺少 DLL → 检查 VxKex 是否添加了 bin 下**所有** exe
+- 装完仍报缺少 DLL / 打不开 → 跑 `诊断启动问题.cmd`，多半是漏加了某些 exe
 - 360 报木马 → 误报，源码可见。把文件夹加白名单
 
 ---
