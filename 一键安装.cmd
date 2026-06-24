@@ -12,12 +12,17 @@ echo    [2] 从 GitHub 下载 VxKex-NEXT (Win7 兼容层)
 echo    [3] 依次启动两个安装程序
 echo    [4] 自动定位 Synology Drive 的 bin 目录
 echo    [5] 打开 VxKex 设置窗口供您添加程序
+echo    [6] 验证并按需配置开机自启动
+echo.
+echo  本工具会做这些系统改动 (都是为了让程序正常运行):
+echo    - 配置开机自启动 (第 7 步, 可当场选择跳过)
+echo    - 写入 TLS 1.2 注册表项 (用于访问 GitHub / 群晖下载)
+echo    - 必要时启用系统自带的 BITS 下载服务
 echo.
 echo  本工具不会:
-echo    - 修改系统关键文件
-echo    - 创建自启动项
-echo    - 上传任何数据
-echo    - 静默执行任何操作
+echo    - 删除或替换任何系统文件
+echo    - 上传或收集任何数据
+echo    - 静默安装 (每一步都需要您确认)
 echo.
 echo ============================================================
 echo  执行前请阅读:

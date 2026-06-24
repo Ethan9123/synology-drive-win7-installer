@@ -66,7 +66,8 @@ $runEntry = $null
 try {
     $runProps = Get-ItemProperty -Path $runKey -ErrorAction Stop
     foreach ($p in $runProps.PSObject.Properties) {
-        if ($p.Name -in @("PSPath","PSParentPath","PSChildName","PSDrive","PSProvider")) { continue }
+        # -contains 而非 -in (后者是 PS3+, 在 PS2.0 上会解析报错)
+        if (@("PSPath","PSParentPath","PSChildName","PSDrive","PSProvider") -contains $p.Name) { continue }
         # 必须匹配 SynologyDrive.exe (区分 Synology Assistant / Photos 等同厂商应用)
         if ($p.Value -is [string] -and $p.Value -match "SynologyDrive\.exe") {
             $runEntry = $p
@@ -161,7 +162,8 @@ if ($runOK -or $shortcutOK) {
     Write-Host "    [3] 不需要自启动, 退出" -ForegroundColor Yellow
     Write-Host ""
     $choice = Read-Host "请输入选择 (1/2/3, 默认 1)"
-    if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "1" }
+    # PS2.0/.NET3.5 安全写法 (IsNullOrWhiteSpace 是 .NET4+)
+    if (-not $choice -or -not $choice.Trim()) { $choice = "1" }
 
     switch ($choice) {
         "1" {

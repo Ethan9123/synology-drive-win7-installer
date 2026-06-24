@@ -46,7 +46,19 @@ function Get-IfeoInfo {
                 $verifier = $props.VerifierDlls
                 $gf = $props.GlobalFlag
                 $gfNum = 0
-                if ($null -ne $gf) { try { $gfNum = [int64]$gf } catch { $gfNum = 0 } }
+                # GlobalFlag 可能是 REG_DWORD(int) 或 REG_SZ 十六进制字符串 "0x100",
+                # 两种都要能解析, 否则会误报 "缺 0x100 位"
+                if ($null -ne $gf) {
+                    try {
+                        if ($gf -is [string]) {
+                            $s = $gf.Trim()
+                            if ($s -match '^0x') { $gfNum = [Convert]::ToInt64($s.Substring(2), 16) }
+                            elseif ($s -ne '') { $gfNum = [Convert]::ToInt64($s, 10) }
+                        } else {
+                            $gfNum = [int64]$gf
+                        }
+                    } catch { $gfNum = 0 }
+                }
                 $hasVerifierBit = (($gfNum -band 0x100) -ne 0)
                 if (-not [string]::IsNullOrEmpty($verifier)) {
                     return New-Object PSObject -Property @{

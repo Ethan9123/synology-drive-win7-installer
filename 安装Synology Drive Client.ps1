@@ -161,7 +161,7 @@ function Get-RemoteFile {
         try {
             Import-Module BitsTransfer -ErrorAction Stop
             Start-BitsTransfer -Source $Url -Destination $OutFile `
-                -DisplayName $Description -Description "Synology Drive 安装工具下载"
+                -DisplayName $Description -Description "Synology Drive 安装工具下载" -ErrorAction Stop
             if (Test-Path $OutFile) {
                 $size = (Get-Item $OutFile).Length
                 Write-Step "BITS 下载完成: $([math]::Round($size/1MB, 2)) MB"
@@ -633,7 +633,8 @@ if (-not $synoExe) {
         Write-Host "    [3] 跳过, 我不需要自启动" -ForegroundColor Yellow
         Write-Host ""
         $choice = Read-Host "请输入选择 (1/2/3, 默认 1)"
-        if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "1" }
+        # PS2.0/.NET3.5 安全写法 (IsNullOrWhiteSpace 是 .NET4+)
+        if (-not $choice -or -not $choice.Trim()) { $choice = "1" }
 
         switch ($choice) {
             "1" {
@@ -671,7 +672,8 @@ if (-not $synoExe) {
     # === 额外保险: 测试当前是否能通过 VxKex 正常启动 ===
     Write-Host ""
     $testLaunch = Read-Host "是否现在测试启动一次 Synology Drive? (Y/N, 默认 Y)"
-    if ([string]::IsNullOrWhiteSpace($testLaunch) -or $testLaunch -eq 'Y' -or $testLaunch -eq 'y') {
+    # PS2.0/.NET3.5 安全写法 (IsNullOrWhiteSpace 是 .NET4+)
+    if ((-not $testLaunch -or -not $testLaunch.Trim()) -or $testLaunch -eq 'Y' -or $testLaunch -eq 'y') {
         Write-Step "启动 Synology Drive 进行测试..."
         try {
             Start-Process -FilePath $synoExe -ErrorAction Stop
