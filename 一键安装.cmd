@@ -1,21 +1,29 @@
 @echo off
 title Synology Drive Client 一键安装工具
 
-REM ==== 自动申请管理员权限 (没权限脚本会一开头就退) ====
-net session >nul 2>&1
-if not "%errorlevel%"=="0" (
+REM ==== 自动申请管理员权限 (兼容中文路径 + 防死循环) ====
+REM 已带标记参数 = 已是提权后的实例, 直接进主流程
+if "%~1"=="elevated" goto :main
+REM fltmc 需要管理员权限, 返回 0 表示已是管理员 (不依赖任何系统服务)
+fltmc >nul 2>&1
+if "%errorlevel%"=="0" goto :main
+REM 未提权: 写一个临时 VBS, 用 ShellExecute runas 以管理员重启自己。
+REM 用 VBS 从文件读取路径, 避免中文路径经命令行传参被搞乱。
+set "_vbs=%TEMP%\syno_elevate.vbs"
+> "%_vbs%" echo Set o = CreateObject("Shell.Application")
+>>"%_vbs%" echo o.ShellExecute "%~f0", "elevated", "", "runas", 1
+cscript //nologo "%_vbs%"
+set "_rc=%errorlevel%"
+del "%_vbs%" >nul 2>&1
+if not "%_rc%"=="0" (
     echo.
-    echo   需要管理员权限, 即将弹出 UAC 授权窗口, 请点 [是]...
-    echo   (若没弹窗, 请右键本文件选择 "以管理员身份运行")
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" 2>nul
-    if errorlevel 1 (
-        echo.
-        echo   自动提权失败, 请手动右键本文件 [以管理员身份运行]
-        pause
-    )
-    exit /b
+    echo   提权被取消或失败, 请右键本文件手动选择 "以管理员身份运行"
+    echo.
+    pause
 )
+exit /b
 
+:main
 echo.
 echo ============================================================
 echo     Synology Drive Client 一键安装工具 (Win7 兼容版)
@@ -53,12 +61,13 @@ echo.
 echo 正在启动安装脚本...
 echo.
 
-REM 使用系统自带 PowerShell, 不使用任何隐藏窗口/编码命令参数
+REM 切到脚本所在目录, 再用 -File 调用 (中文路径 -File 传参是可靠的)
+pushd "%~dp0"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0安装Synology Drive Client.ps1"
-
-set EXITCODE=%ERRORLEVEL%
+set "EXITCODE=%ERRORLEVEL%"
+popd
 echo.
-if %EXITCODE% EQU 0 (
+if "%EXITCODE%"=="0" (
     echo ============================================================
     echo  安装流程已结束
     echo ============================================================
