@@ -418,8 +418,16 @@ if (-not $ok) {
 $kexLocalPath = $null
 
 if (-not $script:SkipVxKex) {
-    Write-Section "Step 3/7  下载 VxKex-NEXT (Win7 兼容层)"
+    Write-Section "Step 3/7  准备 VxKex-NEXT (Win7 兼容层)"
 
+    # 离线优先: 若 downloads 里已放了 VxKex 安装包(KexSetup*.exe), 直接用, 不联网下载
+    $preKex = Get-ChildItem -Path $WorkDir -Filter "KexSetup*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 1MB } | Select-Object -First 1
+    if ($preKex) {
+        $kexLocalPath = $preKex.FullName
+        Write-Step "已发现预置的 VxKex 安装包, 跳过下载: $($preKex.Name)"
+    }
+
+    if (-not $kexLocalPath) {
     # 优先从 GitHub Releases API 获取最新版本
     $kexUrl = $null
     $kexFileName = $null
@@ -467,6 +475,7 @@ if (-not $script:SkipVxKex) {
         Pause-Continue "按回车键退出"
         try { Stop-Transcript } catch { }
         exit 1
+    }
     }
 } else {
     Write-Section "Step 3/7  跳过 VxKex-NEXT (非 Win7 系统)"
