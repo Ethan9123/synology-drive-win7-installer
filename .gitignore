@@ -14,3 +14,6 @@ desktop.ini
 
 # Claude Code 本地代理状态
 .claude/
+
+# 打包产物 (走 GitHub Release 分发, 不进 git)
+*.zip
