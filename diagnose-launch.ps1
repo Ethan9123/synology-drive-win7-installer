@@ -14,10 +14,24 @@
 #   是否都已被 VxKex 接管。
 # =============================================================
 
-try {
-    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    $OutputEncoding = [System.Text.Encoding]::UTF8
-} catch { }
+# 控制台输出兼容层 —— 修复 PS2.0 上 Write-Host -ForegroundColor 写中文
+# 触发缓冲区 Win32 错误(0x1F)导致崩溃; 改为无颜色纯文本输出, 并按
+# 控制台自身代码页显示(中文 Win7 = GBK), 避免乱码。
+function Write-Host {
+    param(
+        [Parameter(Position = 0, ValueFromRemainingArguments = $true)] $Object = "",
+        $Separator = " ",
+        $ForegroundColor,
+        $BackgroundColor,
+        [switch] $NoNewline
+    )
+    $text = (@($Object) -join $Separator)
+    try {
+        if ($NoNewline) { [System.Console]::Write($text) } else { [System.Console]::WriteLine($text) }
+    } catch {
+        try { Microsoft.PowerShell.Utility\Write-Output $text } catch { }
+    }
+}
 
 function Write-Section { param([string]$T)
     Write-Host ""

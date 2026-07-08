@@ -10,11 +10,27 @@
 #   - 所有 URL 均为官方源
 # =============================================================
 
-# 控制台编码
-try {
-    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    $OutputEncoding = [System.Text.Encoding]::UTF8
-} catch { }
+# 控制台输出兼容层 —— 关键修复 (PowerShell 2.0)
+# PS2.0 上用 Write-Host -ForegroundColor 写中文, 会触发控制台缓冲区
+# Win32 错误(0x1F "设备没有发挥作用")直接让脚本崩溃退出。这里覆盖
+# Write-Host 为"无颜色纯文本输出"(走标准输出流, 不碰颜色缓冲区 API),
+# 彻底规避崩溃。同时不再强制 UTF-8, 让输出按控制台自身代码页
+# (中文 Win7 = GBK) 显示, 避免乱码。
+function Write-Host {
+    param(
+        [Parameter(Position = 0, ValueFromRemainingArguments = $true)] $Object = "",
+        $Separator = " ",
+        $ForegroundColor,
+        $BackgroundColor,
+        [switch] $NoNewline
+    )
+    $text = (@($Object) -join $Separator)
+    try {
+        if ($NoNewline) { [System.Console]::Write($text) } else { [System.Console]::WriteLine($text) }
+    } catch {
+        try { Microsoft.PowerShell.Utility\Write-Output $text } catch { }
+    }
+}
 
 # 启用 TLS 1.2 (访问 GitHub / Synology 必需)
 # 先试枚举名; 老版本 .NET (3.5) 上 Tls12 枚举未定义会抛异常, 再退回数值 3072
