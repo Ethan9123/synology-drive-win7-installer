@@ -38,8 +38,21 @@ if (-not (Test-Path $WorkDir)) {
 }
 
 # 日志记录: 出问题时方便排查
-$logPath = Join-Path $WorkDir ("install-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
+# 重要: PowerShell 2.0 (Win7 出厂默认) 的 Start-Transcript 不记录
+#       Write-Host 输出, 所以另开一个手写日志, 保证任何 PS 版本都留痕。
+$stamp = (Get-Date -Format "yyyyMMdd-HHmmss")
+$logPath = Join-Path $WorkDir ("install-" + $stamp + ".log")
+$script:PlainLog = Join-Path $WorkDir ("install-log-" + $stamp + ".txt")
 try { Start-Transcript -Path $logPath -Append -ErrorAction Stop | Out-Null } catch { }
+
+function Write-Log {
+    param([string]$Text)
+    try {
+        $line = (Get-Date -Format "HH:mm:ss") + "  " + $Text
+        Add-Content -Path $script:PlainLog -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
+    } catch { }
+}
+try { Write-Log ("==== 安装脚本启动  PS=" + $PSVersionTable.PSVersion.ToString()) } catch { }
 
 # -------------------------------------------------------------
 # 工具函数
@@ -51,26 +64,31 @@ function Write-Section {
     Write-Host ("=" * 60) -ForegroundColor Cyan
     Write-Host "  $Text" -ForegroundColor Cyan
     Write-Host ("=" * 60) -ForegroundColor Cyan
+    Write-Log ("=== " + $Text)
 }
 
 function Write-Step {
     param([string]$Text)
     Write-Host "[+] $Text" -ForegroundColor Green
+    Write-Log ("[+] " + $Text)
 }
 
 function Write-Info {
     param([string]$Text)
     Write-Host "    $Text" -ForegroundColor Gray
+    Write-Log ("    " + $Text)
 }
 
 function Write-Warn {
     param([string]$Text)
     Write-Host "[!] $Text" -ForegroundColor Yellow
+    Write-Log ("[!] " + $Text)
 }
 
 function Write-Err {
     param([string]$Text)
     Write-Host "[X] $Text" -ForegroundColor Red
+    Write-Log ("[X] " + $Text)
 }
 
 function Pause-Continue {
@@ -246,6 +264,21 @@ function Get-RemoteFile {
     }
 
     return $false
+}
+
+# 顶层异常捕获: PS2.0 上未处理的终止错误否则会一闪而过看不到,
+# 这里先写进日志, 再照常终止, 方便远程排查。
+trap {
+    try {
+        Write-Log ("!! 未处理异常: " + $_.Exception.Message)
+        Write-Log ("!! 位置: 第 " + $_.InvocationInfo.ScriptLineNumber + " 行  " + $_.InvocationInfo.Line.Trim())
+    } catch { }
+    Write-Host ""
+    Write-Host "[X] 脚本出错: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    详细见日志: $script:PlainLog" -ForegroundColor Yellow
+    Read-Host "按回车键退出" | Out-Null
+    try { Stop-Transcript } catch { }
+    exit 1
 }
 
 # -------------------------------------------------------------

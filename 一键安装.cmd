@@ -1,6 +1,21 @@
 @echo off
 title Synology Drive Client 一键安装工具
 
+REM ==== 自动申请管理员权限 (没权限脚本会一开头就退) ====
+net session >nul 2>&1
+if not "%errorlevel%"=="0" (
+    echo.
+    echo   需要管理员权限, 即将弹出 UAC 授权窗口, 请点 [是]...
+    echo   (若没弹窗, 请右键本文件选择 "以管理员身份运行")
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" 2>nul
+    if errorlevel 1 (
+        echo.
+        echo   自动提权失败, 请手动右键本文件 [以管理员身份运行]
+        pause
+    )
+    exit /b
+)
+
 echo.
 echo ============================================================
 echo     Synology Drive Client 一键安装工具 (Win7 兼容版)
@@ -30,8 +45,6 @@ echo ============================================================
 echo  1. 建议先临时关闭 360 或将本文件夹加入白名单
 echo     (VxKex-NEXT 会 hook 系统 DLL 加载, 杀毒软件可能误报)
 echo  2. 安装完成后可以重新开启 360
-echo  3. 如果脚本无法运行, 请右键本 cmd 文件选择
-echo     "以管理员身份运行"
 echo ============================================================
 echo.
 pause
@@ -52,7 +65,7 @@ if %EXITCODE% EQU 0 (
 ) else (
     echo ============================================================
     echo  脚本异常退出, 错误码: %EXITCODE%
-    echo  请截图错误信息以便排查
+    echo  请把 downloads 文件夹里的 install-log-*.txt 发出来排查
     echo ============================================================
 )
 echo.
