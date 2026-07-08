@@ -465,16 +465,34 @@ if (-not $script:SkipVxKex) {
     $kexLocalPath = Join-Path $WorkDir $kexFileName
     $ok = Get-RemoteFile -Url $kexUrl -OutFile $kexLocalPath -Description "VxKex-NEXT"
     if (-not $ok) {
-        Write-Err "VxKex-NEXT 下载失败 (国内访问 GitHub 常不稳定)"
-        Write-Warn "请在另一台电脑下载, 拷贝到本机的 downloads 目录后重新运行:"
-        Write-Info "目标目录 : $WorkDir"
-        Write-Info "期望文件名: $kexFileName"
-        Write-Info "直链下载 : $kexUrl"
-        Write-Info "发布页面 : https://github.com/YuZhouRen86/VxKex-NEXT/releases/latest"
-        Write-Info "注意: 请下载 KexSetup_Release_ 开头的文件, 不要下 Debug 版"
-        Pause-Continue "按回车键退出"
-        try { Stop-Transcript } catch { }
-        exit 1
+        $kexLocalPath = $null
+        Write-Warn "自动下载 VxKex 失败 —— 老 Win7 连不上 GitHub(TLS 太老)很常见, 属正常。"
+        Write-Host ""
+        Write-Host "  >>> 只差最后一个 5MB 文件, 手动放一次就好 <<<"
+        Write-Host ""
+        Write-Host "  1) 用手机 或 另一台能上网的电脑, 打开:"
+        Write-Host "       https://github.com/YuZhouRen86/VxKex-NEXT/releases/latest"
+        Write-Host "  2) 下载名字以 KexSetup_Release_ 开头的 .exe (5MB, 别下 Debug 版)"
+        Write-Host "  3) 把它拷到下面这个文件夹 (已自动为你打开):"
+        Write-Host "       $WorkDir"
+        Write-Host ""
+        try { Start-Process explorer.exe -ArgumentList "`"$WorkDir`"" } catch { }
+        # 原地等待: 放好文件按回车即可继续, 不用重新跑整个流程
+        while (-not $kexLocalPath) {
+            $ans = Read-Host "放好后按回车重新检查 (实在放不了就输入 Q 放弃)"
+            if ($ans -eq 'Q' -or $ans -eq 'q') {
+                Write-Warn "已放弃。稍后把 VxKex 放进 downloads 再重新运行即可。"
+                try { Stop-Transcript } catch { }
+                exit 1
+            }
+            $found = Get-ChildItem -Path $WorkDir -Filter "KexSetup*.exe" -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 1MB } | Select-Object -First 1
+            if ($found) {
+                $kexLocalPath = $found.FullName
+                Write-Step "已找到 VxKex: $($found.Name), 继续安装"
+            } else {
+                Write-Warn "还没检测到 KexSetup*.exe, 确认已拷进: $WorkDir"
+            }
+        }
     }
     }
 } else {
