@@ -149,8 +149,21 @@ function Get-RemoteFile {
     if (Test-Path $OutFile) {
         $size = (Get-Item $OutFile).Length
         if ($size -gt 1MB) {
-            Write-Step "本地已存在 ($([math]::Round($size/1MB, 2)) MB), 跳过下载"
-            return $true
+            # 已有缓存文件: 若设了固定 SHA256, 先校验缓存本身,
+            # 校验不过(半截/损坏/旧版残留)就删掉重新下载
+            if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
+                $cachedSha = Get-FileSha256Lower -Path $OutFile
+                if (-not [string]::IsNullOrEmpty($cachedSha) -and ($cachedSha -eq $ExpectedSha256.ToLower())) {
+                    Write-Step "本地已存在且校验通过 ($([math]::Round($size/1MB, 2)) MB), 跳过下载"
+                    return $true
+                } else {
+                    Write-Warn "本地缓存 SHA256 不匹配, 删除并重新下载"
+                    try { Remove-Item $OutFile -Force } catch { }
+                }
+            } else {
+                Write-Step "本地已存在 ($([math]::Round($size/1MB, 2)) MB), 跳过下载"
+                return $true
+            }
         } else {
             Remove-Item $OutFile -Force
         }
@@ -286,9 +299,13 @@ Write-Info "内部版本号: $osVersion"
 $isWin7 = ($osVersion -like "6.1*")
 if ($isWin7) {
     Write-Step "已识别为 Windows 7, 需要 VxKex-NEXT 兼容层"
-    Write-Info "提示: 干净的 Win7 SP1 需要先装 KB4474419 (SHA-2 签名支持),"
-    Write-Info "      否则新版安装包的数字签名无法验证。"
-    Write-Info "下载: https://www.catalog.update.microsoft.com/Search.aspx?q=KB4474419"
+    Write-Info "提示: 干净的 Win7 需要以下前置补丁, 否则新版安装包的 SHA-2"
+    Write-Info "      数字签名无法验证 / VxKex 无法正常加载:"
+    Write-Info "  0) 必须先装 Service Pack 1 (SP1)"
+    Write-Info "  1) KB4490628 (服务栈更新 SSU) -> 重启"
+    Write-Info "  2) KB4474419 (SHA-2 签名支持) -> 重启  [顺序不能反]"
+    Write-Info "  3) VxKex 另需 KB2533623 + KB2670838 (多数程序依赖)"
+    Write-Info "下载: https://www.catalog.update.microsoft.com/  (按 KB 号搜索)"
 } else {
     Write-Warn "当前系统不是 Win7, 可能不需要安装 VxKex-NEXT"
     $ans = Read-Host "是否仍要继续完整流程? (Y=继续 / N=只装 Synology Drive)"
@@ -323,7 +340,16 @@ $synoUrlFileName = $synoFileName -replace ' ', '%20'
 $synoUrl = "https://global.synologydownload.com/download/Utility/SynologyDriveClient/${synoVersion}/Windows/Installer/${synoArchFolder}/${synoUrlFileName}"
 $synoLocalPath = Join-Path $WorkDir $synoFileName
 
-$ok = Get-RemoteFile -Url $synoUrl -OutFile $synoLocalPath -Description "Synology Drive Client $synoVersion"
+# 完整性校验: 只对已知版本启用固定 SHA256, 防止半截下载/CDN 篡改。
+# 注: 群晖官方归档站不公布校验和, 此值为本工具作者亲自下载官方 x86
+# 安装包后计算 (4.0.3-17892, 71342576 字节)。改了 $synoVersion 就自动
+# 不校验 (避免误报), 换版本时把下面这行清空或更新即可。
+$synoSha256 = ""
+if ($synoVersion -eq "4.0.3-17892" -and $synoArchSuffix -eq "x86") {
+    $synoSha256 = "a8cfce9ee1a1c6705b28c013d5ab92029e499c34f6d8142dcb69f4d8e124c4a4"
+}
+
+$ok = Get-RemoteFile -Url $synoUrl -OutFile $synoLocalPath -Description "Synology Drive Client $synoVersion" -ExpectedSha256 $synoSha256
 if (-not $ok) {
     Write-Err "Synology Drive 下载失败"
     Write-Warn "请在另一台能上网的电脑下载, 拷贝到本机的 downloads 目录后重新运行:"
@@ -372,11 +398,10 @@ if (-not $script:SkipVxKex) {
         Write-Warn "无法访问 GitHub API ($($_.Exception.Message))"
     }
 
-    # 备用地址
+    # 备用地址 (GitHub API 抓不到最新时用): 截至 2026-07 的最新版
     if (-not $kexUrl) {
-        # Latest as of 2026-05-12
-        $kexFileName = "KexSetup_Release_1_1_4_2085.exe"
-        $kexUrl = "https://github.com/YuZhouRen86/VxKex-NEXT/releases/download/1.1.4.2085/$kexFileName"
+        $kexFileName = "KexSetup_Release_1_2_0_2226.exe"
+        $kexUrl = "https://github.com/YuZhouRen86/VxKex-NEXT/releases/download/1.2.0.2226/$kexFileName"
         Write-Warn "使用备用版本: $kexFileName"
     }
 
