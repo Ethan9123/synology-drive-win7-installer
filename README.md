@@ -199,7 +199,19 @@ PowerShell 要求：建议 **5.1**（WMF 5.1）。Win7 默认是 2.0，需先装
 - ❌ 删除或替换任何系统文件
 - ❌ 自动写入 VxKex 注册表（避免被杀软拦截）
 
-> 透明起见，本工具**确会**做的系统改动：按需配置开机自启动、写入 `HKLM` 的 TLS1.2 设置（为能从 GitHub/群晖下载）、必要时启用系统自带的 BITS 服务。均为正常运行所需且公开可见。
+> 透明起见，本工具**确会**做的系统改动：按需配置开机自启动、**启用系统 TLS 1.2**（为能从 GitHub/群晖下载）、必要时启用并重启系统自带的 BITS 服务。均为正常运行所需且公开可见。
+
+### 关于「启用系统 TLS 1.2」
+
+Win7 出厂时 **TLS 1.2 是关闭的**，这正是它连不上 GitHub / 群晖的根因（BITS 会报 `安全频道支持出错`）。脚本会打开这三处——**只"开"新协议，不关闭/不削弱任何现有协议**，这是[微软官方推荐](https://support.microsoft.com/en-us/topic/update-to-enable-tls-1-1-and-tls-1-2-as-default-secure-protocols-in-winhttp-in-windows-c4bd73d2-31d7-761e-0178-11268bb10392)的安全增强，随时可删值改回：
+
+| 层 | 注册表 | 值 |
+|---|---|---|
+| SCHANNEL（系统协议层） | `...\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\|1.2\Client` | `Enabled=1`, `DisabledByDefault=0` |
+| WinHTTP（BITS 走这层） | `...\Internet Settings\WinHttp` | `DefaultSecureProtocols=0xA00` |
+| .NET | `...\.NETFramework\v4.0.30319` | `SchUseStrongCrypto=1` |
+
+> ⚠️ WinHTTP 那层**需要 [KB3140245](https://www.catalog.update.microsoft.com/Search.aspx?q=KB3140245)** 才生效（脚本会自动检测并提示）。SCHANNEL 改动通常**重启后**才完全生效——脚本会先重启 BITS 服务尝试免重启；若下载仍失败，重启电脑后重跑即可，或直接走离线方式。
 
 ---
 

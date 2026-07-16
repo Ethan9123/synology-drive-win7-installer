@@ -313,20 +313,81 @@ if (-not (Test-Admin)) {
 }
 Write-Step "管理员权限: 已确认"
 
-# Win7 默认 .NET 不启用 TLS 1.2, 写入注册表让后续 .NET 进程能访问 GitHub / 群晖
-$tlsPaths = @(
+# -------------------------------------------------------------
+# 启用 Windows 7 的 TLS 1.2 (让 BITS 能下载 GitHub / 群晖)
+# -------------------------------------------------------------
+# Win7 的 TLS1.2 要三层同时开, 少一层 BITS 就报"安全频道支持出错":
+#   1) SCHANNEL   —— 系统协议层, Win7 上 TLS1.1/1.2 客户端默认是关的
+#   2) WinHTTP    —— BITS 走这层, 需 KB3140245 才认 DefaultSecureProtocols
+#   3) .NET       —— 只影响 .NET 程序(如 PowerShell 自身)
+# 注意: 这里只"打开"新协议(TLS1.1/1.2), 不关闭/不削弱任何现有协议,
+#       属于微软官方推荐的安全增强, 可随时改回。
+$tlsChanged = $false
+
+# 1) SCHANNEL: 打开 TLS 1.1 / 1.2 客户端
+foreach ($proto in @("TLS 1.1", "TLS 1.2")) {
+    $clientKey = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\$proto\Client"
+    try {
+        if (-not (Test-Path $clientKey)) { New-Item -Path $clientKey -Force | Out-Null }
+        New-ItemProperty -Path $clientKey -Name "Enabled" -Value 1 -PropertyType DWord -Force | Out-Null
+        New-ItemProperty -Path $clientKey -Name "DisabledByDefault" -Value 0 -PropertyType DWord -Force | Out-Null
+        Write-Step "已启用系统协议 $proto (客户端)"
+        $tlsChanged = $true
+    } catch {
+        Write-Warn "启用 $proto 失败: $($_.Exception.Message)"
+    }
+}
+
+# 2) WinHTTP: DefaultSecureProtocols = 0xA00 (TLS1.1 0x200 + TLS1.2 0x800)
+foreach ($p in @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp",
+    "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Internet Settings\WinHttp"
+)) {
+    try {
+        if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+        New-ItemProperty -Path $p -Name "DefaultSecureProtocols" -Value 0xA00 -PropertyType DWord -Force | Out-Null
+        Write-Step "已设置 WinHTTP DefaultSecureProtocols=0xA00"
+        $tlsChanged = $true
+    } catch { }
+}
+
+# 3) .NET: SchUseStrongCrypto
+foreach ($p in @(
     "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319",
     "HKLM:\SOFTWARE\Wow6432Node\Microsoft\.NETFramework\v4.0.30319"
-)
-foreach ($p in $tlsPaths) {
+)) {
     if (Test-Path $p) {
         try {
             New-ItemProperty -Path $p -Name "SchUseStrongCrypto" -Value 1 -PropertyType DWord -Force | Out-Null
             New-ItemProperty -Path $p -Name "SystemDefaultTlsVersions" -Value 1 -PropertyType DWord -Force | Out-Null
-            Write-Step "TLS 1.2 注册表已启用 ($p)"
+            Write-Step ".NET TLS 1.2 已启用 ($p)"
         } catch {
-            Write-Warn "TLS 注册表写入失败: $($_.Exception.Message)"
+            Write-Warn ".NET TLS 注册表写入失败: $($_.Exception.Message)"
         }
+    }
+}
+
+# 4) 检查 KB3140245 —— 没它的话 WinHTTP/BITS 仍然用不了 TLS1.2
+$hasTlsKb = $false
+try { if (Get-HotFix -Id "KB3140245" -ErrorAction SilentlyContinue) { $hasTlsKb = $true } } catch { }
+if ($hasTlsKb) {
+    Write-Step "KB3140245 已安装 (WinHTTP TLS1.2 支持就绪)"
+} else {
+    Write-Warn "未检测到 KB3140245 —— 缺它则 BITS/WinHTTP 仍无法用 TLS1.2 联网下载"
+    Write-Info "(不影响离线安装; 若想让脚本自己下载, 装完它并重启即可)"
+    Write-Info "下载: https://www.catalog.update.microsoft.com/Search.aspx?q=KB3140245"
+}
+
+# 5) 重启 BITS 服务, 让它重新读取新的 WinHTTP/TLS 设置 (免去重启电脑)
+if ($tlsChanged) {
+    try {
+        $bits = Get-Service -Name BITS -ErrorAction Stop
+        if ($bits.Status -eq 'Running') {
+            Restart-Service -Name BITS -Force -ErrorAction Stop
+            Write-Step "已重启 BITS 服务以应用新的 TLS 设置"
+        }
+    } catch {
+        Write-Warn "重启 BITS 服务失败(不影响离线安装): $($_.Exception.Message)"
     }
 }
 
@@ -468,7 +529,14 @@ if (-not $script:SkipVxKex) {
         $kexLocalPath = $null
         Write-Warn "自动下载 VxKex 失败 —— 老 Win7 连不上 GitHub(TLS 太老)很常见, 属正常。"
         Write-Host ""
-        Write-Host "  >>> 只差最后一个 5MB 文件, 手动放一次就好 <<<"
+        Write-Host "  [方案A 最快] 手动放入 VxKex (往下看, 5MB, 放一次就好)"
+        Write-Host "  [方案B 想让它自己下] 本脚本刚已为你打开系统 TLS 1.2,"
+        Write-Host "         重启电脑后重新运行本工具, 多半就能自动下载了。"
+        if (-not $hasTlsKb) {
+            Write-Host "         (但你这台缺 KB3140245, 需先装它: 微软更新目录搜该 KB 号)"
+        }
+        Write-Host ""
+        Write-Host "  >>> 方案A: 只差最后一个 5MB 文件, 手动放一次就好 <<<"
         Write-Host ""
         Write-Host "  1) 用手机 或 另一台能上网的电脑, 打开:"
         Write-Host "       https://github.com/YuZhouRen86/VxKex-NEXT/releases/latest"

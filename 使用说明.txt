@@ -185,7 +185,14 @@ Q9: 干净的 Win7 一堆签名/加载报错
    [√] 帮你定位 bin 目录, 路径复制到剪贴板
    [√] 自动打开 VxKex 设置 GUI
    [√] 按需配置开机自启动 (第 7 步, 可当场跳过)
-   [√] 写入 TLS1.2 注册表项 / 必要时启用 BITS 服务
+   [√] 启用系统 TLS 1.2 / 必要时启用并重启 BITS 服务
+       (Win7 的 TLS1.2 默认是关的, 不开就下载不了 GitHub/群晖。
+        只"打开"TLS1.1/1.2, 不关闭任何现有协议 —— 是微软官方
+        推荐的安全增强, 不是削弱。涉及三处注册表:
+          SCHANNEL\Protocols\TLS 1.1|1.2\Client  Enabled=1
+          Internet Settings\WinHttp  DefaultSecureProtocols=0xA00
+          .NETFramework\v4.0.30319   SchUseStrongCrypto=1
+        想改回: 把上面这些值删掉即可)
 
 不会做:
    [×] 不静默安装 (所有安装程序都需要您确认)
