@@ -1,0 +1,19 @@
+name: Offline downloader checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  downloader:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        shell: [powershell, pwsh]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse installer and test download validation without installing
+        shell: ${{ matrix.shell }}
+        run: ./tests/download-validation.ps1

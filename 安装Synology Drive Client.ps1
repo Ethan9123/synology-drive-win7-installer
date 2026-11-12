@@ -211,6 +211,11 @@ function Get-RemoteFile {
                 -DisplayName $Description -Description "Synology Drive 安装工具下载" -ErrorAction Stop
             if (Test-Path $OutFile) {
                 $size = (Get-Item $OutFile).Length
+                if ($size -le 1MB) {
+                    Write-Err "下载文件为空或不完整: $OutFile"
+                    Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue
+                    return $false
+                }
                 Write-Step "BITS 下载完成: $([math]::Round($size/1MB, 2)) MB"
                 if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
                     $actualSha256 = Get-FileSha256Lower -Path $OutFile
@@ -235,6 +240,11 @@ function Get-RemoteFile {
         Invoke-WebRequest -Uri $Url -OutFile $OutFile -UseBasicParsing -TimeoutSec 300
         if (Test-Path $OutFile) {
             $size = (Get-Item $OutFile).Length
+            if ($size -le 1MB) {
+                Write-Err "下载文件为空或不完整: $OutFile"
+                Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue
+                return $false
+            }
             Write-Step "下载完成: $([math]::Round($size/1MB, 2)) MB"
             if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
                 $actualSha256 = Get-FileSha256Lower -Path $OutFile
@@ -260,6 +270,11 @@ function Get-RemoteFile {
             Invoke-WebRequest -Uri $mirrorUrl -OutFile $OutFile -UseBasicParsing -TimeoutSec 300
             if (Test-Path $OutFile) {
                 $size = (Get-Item $OutFile).Length
+                if ($size -le 1MB) {
+                    Write-Err "下载文件为空或不完整: $OutFile"
+                    Remove-Item -Path $OutFile -Force -ErrorAction SilentlyContinue
+                    return $false
+                }
                 Write-Step "镜像下载完成: $([math]::Round($size/1MB, 2)) MB"
                 if (-not [string]::IsNullOrEmpty($ExpectedSha256)) {
                     $actualSha256 = Get-FileSha256Lower -Path $OutFile
