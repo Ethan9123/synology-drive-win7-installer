@@ -9,11 +9,11 @@ permissions:
 jobs:
   downloader:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        shell: [powershell, pwsh]
     steps:
       - uses: actions/checkout@v4
-      - name: Parse installer and test download validation without installing
-        shell: ${{ matrix.shell }}
+      - name: Offline regression in Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/download-validation.ps1
+      - name: Offline regression in PowerShell 7
+        shell: pwsh
         run: ./tests/download-validation.ps1
