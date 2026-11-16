@@ -1,244 +1,29 @@
-﻿================================================================
-   Synology Drive Client 一键安装工具 - 使用说明
-================================================================
+﻿Synology Drive Win7 工具使用说明
 
-【目的】
-   在不支持的旧版 Windows (主要是 Win7) 上, 自动安装并配置
-   最新版 Synology Drive Client。
+这是实验性的受控安装工具，尚未完成 Win7 实机部署验收。
+完整说明见 README.md；验收与回退见 docs\ACCEPTANCE.md。
 
-【适用范围】
-   - Windows 7 (32位 / 64位) - 主要目标
-   - Windows 8 / 8.1 - 也可使用 (会跳过 VxKex 兼容层)
-   - Windows 10 / 11 - 通常不需要本工具
+1. 双击“一键安装.cmd”只做只读检查，不提权、不安装、不改系统。
+2. 使用 Windows PowerShell 5.1。PS2 会提前停止；不要仅因脚本能打开就认为兼容。
+3. 在能访问官方源的 Windows 准备机运行：
+   powershell.exe -NoProfile -File .\Install-SynologyDrive.ps1 -Mode DownloadOnly
+4. 把完整文件夹和 downloads 缓存复制到有快照的隔离 Win7 SP1 测试机。
+5. 核查两个包的来源、SHA256、签名状态及安全软件告警。
+6. 阅读验收说明后，在管理员 Windows PowerShell 中显式运行：
+   powershell.exe -NoProfile -File .\Install-SynologyDrive.ps1 -Mode Install -Offline
 
-【包含文件】
-   一键安装.cmd                      - 主入口, 双击启动完整安装流程
-   安装Synology Drive Client.ps1    - 主安装脚本 (PowerShell)
-   检查开机自启动.cmd                - 独立检查/修复自启动状态
-   verify-autostart.ps1             - 自启动检查脚本
-   诊断启动问题.cmd                  - 装完打不开时, 定位启动失败根因
-   diagnose-launch.ps1              - 启动诊断脚本
-   使用说明.txt                      - 本文件
-   downloads/                        - 安装包下载目录 (运行后生成)
+VxKex 固定为 1.2.3.2466 Release，没有嵌入数字签名。
+安装模式会展示其系统改动，并要求输入该样本的完整 SHA256。
+这个确认仅限本次运行，不等于安全鉴定，也不会放过其他签名错误。
 
-================================================================
-   使用步骤
-================================================================
+遇杀毒告警停止核查，不关闭防护、不给整目录或 PowerShell 添加排除。
+工具不更改全机 TLS、BITS 或杀毒设置，不自动选择最新/Debug/旧缓存。
+Offline 禁止工具下载；Windows 签名验证仍可能尝试证书链/吊销查询。
 
-【第一步】拷贝到目标电脑
-   将整个 [SynologyDrive一键安装] 文件夹完整复制到 Win7 电脑上。
-   可放在桌面或任意位置, 但路径中不要包含特殊字符。
+安装成功退出码后仍需找到预期文件版本；需要重启就停在待重启状态。
+找到两个版本也不等于部署验收完成：还要配置兼容层，测试真实文件内容、
+冲突、删除传播、断网恢复、重启及卸载回退。只用测试 NAS 与测试账号。
 
-【第二步】临时处理杀毒软件 (重要, 实测确认)
-   VxKex-NEXT 需要 hook 系统 DLL 加载流程, 这是它工作的核心机制,
-   但同时也会被杀毒软件标记。
-
-   *** 实测: VxKex 安装包(KexSetup) 在下载阶段就会被 Windows
-       Defender 直接判为病毒并隔离, 360 同理。这无法规避 ***
-
-   推荐做法 (二选一, 装完再恢复):
-   A. 临时退出 360 / 临时关闭 Windows Defender 实时保护
-   B. 把本文件夹 + VxKex 安装包加入杀毒软件白名单
-      (Defender: 设置 -> 病毒和威胁防护 -> 排除项)
-
-   注意: 被标记的是 VxKex 二进制, 不是本工具脚本。本脚本是明文
-         PowerShell, 无混淆/加密/编码, 源代码可用记事本逐行审阅。
-
-【第三步】以管理员身份运行
-   1. 右键单击 [一键安装.cmd]
-   2. 选择 [以管理员身份运行]
-   3. 如提示 UAC 请点 [是]
-
-【第四步】按提示完成
-   脚本会自动:
-   - 下载 Synology Drive (官网, 约 100 MB)
-   - 下载 VxKex-NEXT (GitHub, 约 5 MB)
-   - 启动 VxKex 安装程序 (需手动点几下 Next)
-   - 启动 Synology Drive 安装程序 (需手动点几下下一步)
-   - 自动找到 bin 目录, 把路径复制到剪贴板
-   - 打开 VxKex 配置面板和 bin 目录窗口
-
-   最后一步需要您手动操作 (无法自动化, 否则会触发杀毒报警):
-   1. 在 VxKex 面板点 [Add Program]
-   2. 在路径栏粘贴 (Ctrl+V) Synology Drive 的 bin 路径
-   3. Ctrl+A 全选所有 exe, 点 [Open] 添加进去
-   4. 保存并关闭面板
-
-【第五步】验证
-   从开始菜单打开 Synology Drive Client, 能进入登录界面即成功。
-
-================================================================
-   开机自启动
-================================================================
-
-【自启动如何工作】
-   Synology Drive 安装程序默认会自动配置开机自启动:
-   - 写入 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
-   - 启动参数: SynologyDrive.exe /autorun
-
-   在 Win7 上, VxKex-NEXT 通过 IFEO (映像文件执行选项) 钩子
-   注入兼容层。这意味着:
-     * 不管谁调用 SynologyDrive.exe (Run 项 / 任务计划 /
-       手动双击) 都会经过 VxKex 兼容层
-     * 不需要为自启动单独做兼容层配置
-
-【如何验证自启动有效】
-   方式 1: 双击 [检查开机自启动.cmd], 工具会:
-     - 检查 SynologyDrive.exe 路径
-     - 检查注册表 Run 项
-     - 检查启动文件夹快捷方式
-     - 验证目标路径有效性
-     - 如未配置, 一键修复
-
-   方式 2: 重启电脑, 看任务栏托盘是否出现 Synology Drive 图标
-
-【自启动失效常见原因】
-   1. 安装时取消勾选了 [随 Windows 启动]
-      -> 在 Synology Drive 设置中重新勾选, 或运行检查工具修复
-   2. 升级 / 重装 Synology Drive 时清除了 Run 项
-      -> 同上
-   3. Windows 系统优化软件 (如 360 优化大师) 把 Synology Drive
-      从启动项中禁用了
-      -> 在该软件的启动项管理中重新启用
-   4. 用户路径变更 (例如系统迁移导致 USERPROFILE 路径变化)
-      -> 卸载重装 Synology Drive
-
-================================================================
-   故障排查
-================================================================
-
-Q1: 双击 cmd 没反应 / 闪退
-    -> 可能 360 拦截了 PowerShell, 暂时关闭 360 后再试
-
-Q2: 提示 "无法加载脚本因为禁止运行脚本"
-    -> 已在 cmd 中加了 -ExecutionPolicy Bypass, 若仍报错,
-       右键 cmd 选 [以管理员身份运行]
-
-Q3: 下载速度极慢或失败
-    -> 国内访问 GitHub 不稳定, 可在另一台电脑下载后放入 downloads 文件夹,
-       重新运行脚本会自动检测已下载文件并跳过下载。
-       脚本失败时会直接打印出"期望文件名"和"直链", 照着下载即可。
-
-       Synology Drive (版本列表, 选最新或 4.0.2-17889):
-         https://archive.synology.com/download/Utility/SynologyDriveClient
-         注意: 32 位在 Installer/i686/ 目录, 文件名后缀是 -x86
-       VxKex-NEXT (下 KexSetup_Release_ 开头的, 别下 Debug):
-         https://github.com/YuZhouRen86/VxKex-NEXT/releases/latest
-
-Q4: PowerShell 版本太低
-    -> Win7 默认 PowerShell 2.0, 建议先装 WMF 5.1:
-       https://www.microsoft.com/en-us/download/details.aspx?id=54616
-
-Q5: 安装完依然报 "缺少 api-ms-win-crt-runtime-l1-1-0.dll" / 打不开
-    -> 直接双击 [诊断启动问题.cmd], 它会自动告诉你哪个 exe 没被
-       VxKex 接管 (这是最常见原因), 并给出修复步骤
-    -> 手动排查的话:
-       - 检查 VxKex 中是否已添加 bin 目录下 *所有* exe 文件
-         (漏一个都可能导致主程序连锁起不来)
-       - 重启电脑后再试
-       - 确认下载的是 x86 版本, 不是 x64
-       - 仍不行: 在 VxKex 给 SynologyDrive.exe 开 Win10 版本伪装,
-         或把安装脚本的 $synoVersion 回退到 4.0.2-17889
-
-Q6: 360 报木马 / 病毒
-    -> 这是误报。本工具源码完全可见, 行为透明:
-       - 仅下载官方安装包, 仅启动官方安装程序
-       - 不删除或替换任何系统文件
-       - 不上传/收集任何数据, 不静默执行 (每步需确认)
-       - 确有的系统改动都为正常运行且公开可见:
-         开机自启动写在当前用户(HKCU)或启动文件夹;
-         注册表只写 TLS1.2 设置(为能下载); 必要时启用
-         系统自带 BITS 下载服务。均非隐蔽操作。
-       将本文件夹加入 360 白名单即可。
-       如不放心, 可用记事本打开 .ps1 文件查看每一行代码。
-       (真正会被 360 标记的是 VxKex-NEXT 本身, 因为它 hook
-        系统 DLL 加载 — 这是它的工作原理, 无法规避)
-
-Q7: 想批量部署到多台电脑
-    -> 第一台运行后, downloads 文件夹中已有所有安装包
-    -> 将整个文件夹 (含 downloads) 复制到其他电脑, 直接运行
-       即可离线安装, 不再需要联网下载
-
-Q8: 客户端装好了, 却连不上 NAS / 登录失败
-    -> 这是服务端要求, 不是本工具的问题:
-       - NAS 必须装了 Synology Drive Server 套件, 且 DSM 7.0+
-       - 2025 起 DSM 7.3+ 的兼容策略要求客户端 >= 4.0.0 才能连
-         (本工具默认装 4.0.x, 回退版 4.0.2-17889 也满足)
-    -> 先在浏览器登录 NAS 的 DSM, 确认 Drive Server 已启用
-
-Q9: 干净的 Win7 一堆签名/加载报错
-    -> 缺前置补丁。按顺序装 (不能反), 每步之间重启:
-       1) Service Pack 1 (SP1)
-       2) KB4490628 (服务栈更新 SSU) -> 重启
-       3) KB4474419 (SHA-2 签名支持) -> 重启
-       4) KB2533623 + KB2670838 (VxKex 依赖)
-       补丁在 https://www.catalog.update.microsoft.com/ 按 KB 号搜
-
-================================================================
-   一键安装做了什么 / 没做什么
-================================================================
-
-会做:
-   [√] 通过 BITS 服务 (系统自带) 下载官方安装包
-   [√] 启动 VxKex-NEXT 官方安装程序
-   [√] 启动 Synology Drive 官方安装程序
-   [√] 帮你定位 bin 目录, 路径复制到剪贴板
-   [√] 自动打开 VxKex 设置 GUI
-   [√] 按需配置开机自启动 (第 7 步, 可当场跳过)
-   [√] 启用系统 TLS 1.2 / 必要时启用并重启 BITS 服务
-       (Win7 的 TLS1.2 默认是关的, 不开就下载不了 GitHub/群晖。
-        只"打开"TLS1.1/1.2, 不关闭任何现有协议 —— 是微软官方
-        推荐的安全增强, 不是削弱。涉及三处注册表:
-          SCHANNEL\Protocols\TLS 1.1|1.2\Client  Enabled=1
-          Internet Settings\WinHttp  DefaultSecureProtocols=0xA00
-          .NETFramework\v4.0.30319   SchUseStrongCrypto=1
-        想改回: 把上面这些值删掉即可)
-
-不会做:
-   [×] 不静默安装 (所有安装程序都需要您确认)
-   [×] 不写 HKLM\Run 启动项 (自启动写 HKCU 或启动文件夹)
-   [×] 不写计划任务
-   [×] 不上传/收集任何数据
-   [×] 不删除或替换任何系统文件
-   [×] 不自动写入 VxKex 注册表 (避免被杀毒拦截)
-
-================================================================
-   技术细节
-================================================================
-
-为什么需要 VxKex-NEXT?
-   Synology Drive Client 3.3.0 起依赖 UCRT (Universal C Runtime)
-   中的 api-ms-win-crt-*.dll 系列 API, 这些 API 在 Win10 才完善。
-   Win7 即使装了 VC++ Redistributable 也补不齐。
-   VxKex-NEXT 通过提供这些缺失 API 的 Win7 实现来解决问题。
-
-为什么 32 位 (x86) 而不是 64 位?
-   实测在 Win7 上 32 位版兼容性更稳定, 即便系统是 64 位 Win7,
-   也建议使用 x86 安装包。
-   官方下载路径: 32 位在 .../Windows/Installer/i686/ (后缀 -x86),
-                64 位在 .../Windows/Installer/x86_64/ (后缀 -x64)。
-
-默认装哪个版本? 怎么升级?
-   脚本默认装 Synology Drive Client 4.0.3-17892 (截至 2026-06 最新)。
-   升级只需改脚本顶部的 $synoVersion 变量, 版本号见:
-     https://archive.synology.com/download/Utility/SynologyDriveClient
-   VxKex 始终运行时抓 GitHub 最新版 (备用 1.2.0.2226)。
-
-   版本配对提示: 原始方案在 4.0.1 / 4.0.2 实测通过。若最新版配置完
-   VxKex 仍打不开, 把 $synoVersion 回退到 4.0.2-17889 再试。
-
-为什么不能完全自动化?
-   - VxKex 注册表项格式因版本而异, 直接写注册表风险高
-   - 自动写注册表会被 360 / Defender 标记为高风险行为
-   - 把这一步留给用户手动操作, 既安全又透明
-
-================================================================
-   信息来源
-================================================================
-
-原始解决方案: https://zhugh.com/synology/ (作者: zhugh)
-VxKex-NEXT  : https://github.com/YuZhouRen86/VxKex-NEXT
-Synology 版本列表: https://archive.synology.com/download/Utility/SynologyDriveClient
-Synology 官网下载: https://www.synology.cn/zh-cn/support/download
-
-整理日期: 2026-06-03
+diagnose-launch.ps1 会主动尝试启动客户端，不属于只读预检。
+verify-autostart.ps1 可在明确选择后修改快捷方式，默认跳过。
+不要通过只改版本号、清空哈希或关闭证书验证来处理失败。

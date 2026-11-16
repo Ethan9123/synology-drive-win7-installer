@@ -17,3 +17,12 @@ jobs:
       - name: Offline regression in PowerShell 7
         shell: pwsh
         run: ./tests/download-validation.ps1
+      - name: Parse and verify safety contracts in Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/safety-contracts.ps1
+      - name: Parse and verify safety contracts in PowerShell 7
+        shell: pwsh
+        run: ./tests/safety-contracts.ps1
+      - name: Real read-only entry point in Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/entrypoint-checks.ps1
