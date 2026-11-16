@@ -1,227 +1,117 @@
-# Synology Drive Client - Win7 一键安装工具包
+# Synology Drive Client · Win7 受控安装工具
 
-在官方已停止支持的旧版 Windows（主要是 **Windows 7**）上自动安装并配置**最新版 Synology Drive Client**，通过 [VxKex-NEXT](https://github.com/YuZhouRen86/VxKex-NEXT) 注入 Win10 API 兼容层。
+为必须保留 Windows 7 的测试环境准备固定的 Synology Drive Client 与 VxKex-NEXT 安装包，并提供校验、安装状态检查和验收指引。
 
-> 适用：Windows 7 (32 / 64 位) · 也支持 Win8/8.1（自动跳过兼容层）
-> 目标版本：Synology Drive Client 4.0.x 及更高
+**当前是实验性方案，不是已通过生产部署验收的“一键安装”。** Win7 已停止支持，VxKex 没有恢复微软或群晖对 Win7 的支持。程序能打开，也不等于同步数据正确或安全软件能够共存。
 
----
+## 从只读检查开始
 
-## 快速使用
+双击 `一键安装.cmd`，或运行：
 
-1. 下载本仓库（点右上角 `Code` → `Download ZIP` 或 `git clone`）
-2. 拷贝到目标 Win7 电脑（任意位置）
-3. 临时关闭 360 / Defender，或将文件夹加入白名单
-4. **右键 `一键安装.cmd` → 以管理员身份运行**
-5. 按提示完成（约 3-5 分钟）
-6. 重启电脑验证开机自启
-
-详细步骤见 [使用说明.txt](使用说明.txt)。
-
----
-
-## 文件说明
-
-| 文件 | 用途 |
-|------|------|
-| `一键安装.cmd` | 主入口，双击启动完整安装流程 |
-| `安装Synology Drive Client.ps1` | 7 步自动化安装脚本（PowerShell） |
-| `检查开机自启动.cmd` | 独立的自启状态检查 / 修复工具 |
-| `verify-autostart.ps1` | 自启检查脚本（被 .cmd 调用） |
-| `诊断启动问题.cmd` | 装完打不开时用——定位启动失败根因 |
-| `diagnose-launch.ps1` | 启动诊断脚本（被 .cmd 调用） |
-| `快速上手.txt` | **3 步走**极简操作卡（新手先看这个） |
-| `使用说明.txt` | 完整文档 + FAQ + 故障排查 |
-| `downloads/` | 安装包缓存（运行后生成，可批量部署复用） |
-
----
-
-## 原理
-
-### 为什么 Win7 装不上？
-
-Synology Drive Client 从 **3.3.0-15082** 起依赖 UCRT (Universal C Runtime) 中的 `api-ms-win-crt-*.dll` 系列 API。运行时报错：
-
-```
-缺少 api-ms-win-crt-runtime-l1-1-0.dll
+```powershell
+powershell.exe -NoProfile -File .\Install-SynologyDrive.ps1
 ```
 
-微软官方要求升级到 Win10 才能正常使用 UCRT，光装 VC++ Redistributable 补不齐。
+默认 `CheckOnly`：显示系统、固定组件和缓存校验结果。不下载、不请求管理员权限、不启动安装器、不写安装日志，也不修改注册表、BITS、杀毒软件或自启动。
 
-- 微软说明：<https://learn.microsoft.com/zh-cn/answers/questions/3770956/>
-- 群晖更新日志：<https://www.synology.cn/zh-cn/releaseNote/SynologyDriveClient>
+完整流程要求 **Windows PowerShell 5.1（powershell.exe）**。原生 PS2 会在最前面停止，不再把部分语法兼容宣传为完整支持。PowerShell 7 用于开发测试，不作为安装宿主。若系统执行策略阻止脚本，先核验来源并遵循本机管理策略，不自动更改执行策略。
 
-### 解决方案
+## 三种模式
 
-[VxKex-NEXT](https://github.com/YuZhouRen86/VxKex-NEXT) 是一个 Windows 7 的 API 扩展层，提供了缺失 Win10 API 的 Win7 实现。通过 IFEO（映像文件执行选项）钩子注入，所有调用方（Run 注册表项、任务计划、手动启动）都会经过兼容层。
-
-### 工具做了什么
-
-主脚本 7 步流程：
-
-1. **环境检查** — 管理员权限、PowerShell 版本、OS 识别
-2. **下载 Synology Drive Client (x86)** — BITS 走官方 HTTPS
-3. **下载 VxKex-NEXT** — GitHub Releases API 抓最新版
-4. **安装 VxKex-NEXT** — 启动官方安装程序
-5. **安装 Synology Drive** — 启动官方安装程序
-6. **配置 VxKex 兼容层** — 自动定位 `SynologyDrive.app\bin`，路径复制到剪贴板，弹出 GUI 供手动添加
-7. **验证 / 启用开机自启动** — 检查 `HKCU\Run` + 启动文件夹，未配置可一键修复
-
-### 版本信息与升级
-
-脚本默认安装以下经验证的版本（截至 2026-06）：
-
-| 组件 | 版本 | 下载源 |
-|------|------|--------|
-| Synology Drive Client | `4.0.3-17892` (x86) | `global.synologydownload.com` |
-| VxKex-NEXT | `1.2.0.2226`（运行时自动抓 GitHub 最新） | `github.com/YuZhouRen86/VxKex-NEXT` |
-
-**升级 Synology Drive 版本**：只改 `安装Synology Drive Client.ps1` 顶部的 `$synoVersion` 一个变量即可。最新版本号见 [archive.synology.com 版本列表](https://archive.synology.com/download/Utility/SynologyDriveClient)。
-
-> ⚠️ **版本配对**：原始方案在 4.0.1 / 4.0.2 上实测通过。若最新版（如 4.0.3）配置完 VxKex 仍无法启动，把 `$synoVersion` 回退到 `4.0.2-17889` 再试——这是已知稳妥的版本。VxKex 请始终用最新版（新 API 覆盖更全）。
-
-**下载源说明**：群晖官方下载域名是 `global.synologydownload.com`，路径里 32 位在 `Installer/i686/`、64 位在 `Installer/x86_64/`（文件名后缀分别是 `-x86` / `-x64`）。国内访问 GitHub 不稳定时，脚本会自动尝试 `gh-proxy.com` 镜像；都失败则提示在另一台电脑下载、放进 `downloads/` 后重跑（脚本会自动识别已下载文件并跳过）。
-
----
-
-## 反误报设计
-
-> ⚠️ **实测确认**：`KexSetup_Release`（VxKex 安装包）在下载时就会被 **Windows Defender 直接判为病毒/PUA 并隔离**（`contains a virus or potentially unwanted software`）——这不是本工具能规避的，因为 VxKex 的工作原理就是 hook 系统 DLL 加载，天然命中启发式。360 同理。**部署前请先给 VxKex 安装包 / 本文件夹加白名单，或临时关闭实时防护。**
-
-本工具**脚本本体**最大程度避开特征（VxKex 二进制无法规避，但脚本可以）：
-
-- ✅ 纯文本 `.cmd` + `.ps1`，**不编译 exe**，不混淆，不 Base64
-- ✅ 不使用 `Invoke-Expression` / `IEX` / `-EncodedCommand`
-- ✅ 下载用系统自带 **BITS** 服务（`Start-BitsTransfer`）
-- ✅ 所有 URL 走官方源（`global.synologydownload.com`、`github.com`）
-- ✅ 不写 `HKLM\Run` 启动项、不静默执行（`HKLM` 仅写 TLS1.2 设置以便下载）
-- ✅ 自启动只写当前用户 `HKCU\Run` 或启动文件夹，不是隐蔽位置
-- ✅ VxKex 注册表配置保留手动 GUI 环节（自动写 IFEO 必触发杀软）
-
-源码完全可在记事本中打开审阅。
-
----
-
-## 开机自启动机制
-
-### 双保险
-
-| 机制 | 来源 | 描述 |
-|------|------|------|
-| 首选 | Synology 官方 | 安装时自动写 `HKCU\...\Run\SynologyDrive` |
-| 备份 | 本工具 | 在 `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup` 创建 `.lnk` |
-
-### 为什么自启场景兼容
-
-VxKex-NEXT 通过 IFEO（Image File Execution Options）钩子工作——只要 `SynologyDrive.exe` 被 Windows 拉起，**无论从哪里拉起**，都会先过 VxKex 注入兼容层。所以不需要为开机自启单独做配置。
-
-### 失效处理
-
-随时双击 `检查开机自启动.cmd`（无需管理员），3 秒诊断 + 一键修复。
-
-常见失效场景：
-- 安装时取消了"随 Windows 启动"勾选
-- 升级 / 重装时 Run 项被清除
-- 360 优化大师把启动项禁用了
-- 用户路径变更（USERPROFILE 迁移）
-
----
-
-## 批量部署
-
-第一台电脑运行后，`downloads/` 文件夹中会缓存所有安装包。将**整个文件夹（含 downloads）** 复制到其他电脑即可**离线安装**，无需重新下载。
-
----
-
-## 装完打不开？用诊断工具
-
-双击 **`诊断启动问题.cmd`**（无需管理员），它会自动定位根因：
-
-1. 确认 `SynologyDrive.exe` 与 VxKex 是否都装好
-2. **逐个检查 bin 下每个 exe 是否被 VxKex 接管**（读 IFEO 注册表的 `VerifierDlls` + `GlobalFlag` 0x100 位）——漏加任何一个 exe 都可能导致主程序连锁起不来，这是最常见的失败原因
-3. 实际启动一次，失败则扫描应用程序事件日志，打印出 faulting module / 缺失的 DLL
-4. 按优先级给出针对性修复建议
-
-> VxKex NEXT 的工作方式：通过 IFEO 把自己的兼容层 DLL（`VerifierDlls`）注入到目标 exe。所以"某个 exe 没被接管"＝"它会因缺少 `api-ms-win-crt-*.dll` 而启动失败"。诊断工具正是逐个核对这一点。
-
-## 故障排查
-
-详见 [使用说明.txt](使用说明.txt) 的「故障排查」章节。常见问题：
-
-- 双击 cmd 闪退 → 360 拦截 PowerShell，先暂停 360
-- "无法加载脚本" → 已有 `-ExecutionPolicy Bypass`，确认是否以管理员运行
-- 下载失败 → 国内 GitHub 不稳定，手动放 `downloads/` 后重跑脚本
-- 装完仍报缺少 DLL / 打不开 → 跑 `诊断启动问题.cmd`，多半是漏加了某些 exe
-- 360 报木马 → 误报，源码可见。把文件夹加白名单
-
----
-
-## 兼容性
-
-| 系统 | 支持情况 |
-|------|----------|
-| Windows 7 SP1 (x86/x64) | ✅ 主要目标 |
-| Windows 8 / 8.1 | ✅ 自动跳过 VxKex |
-| Windows 10 / 11 | ⚠️ 通常不需要本工具 |
-| Windows XP / Vista | ❌ VxKex 不支持 |
-
-PowerShell 要求：建议 **5.1**（WMF 5.1）。Win7 默认是 2.0，需先装：<https://www.microsoft.com/en-us/download/details.aspx?id=54616>
-（本工具的脚本已做 PS 2.0 兼容处理，`检查开机自启动.cmd` / `诊断启动问题.cmd` 在 2.0 上也能跑；但主安装脚本抓 GitHub 需要现代 TLS，PS 5.1 体验更顺。）
-
-### Win7 前置补丁（干净系统必装，否则签名/兼容层报错）
-
-按顺序安装，**顺序不能反**：
-
-1. **Service Pack 1 (SP1)** — 基础前提
-2. **KB4490628**（服务栈更新 SSU）→ 重启
-3. **KB4474419**（SHA-2 代码签名支持）→ 重启 — 没有它，新版安装包的数字签名无法验证
-4. **KB2533623 + KB2670838** — VxKex-NEXT 及多数现代程序依赖
-
-补丁都在 [微软更新目录](https://www.catalog.update.microsoft.com/) 按 KB 号搜索下载。
-
-### 连不上 NAS？（服务端要求）
-
-装好客户端只是第一步，还要 NAS 端满足：
-
-- NAS 已安装 **Synology Drive Server** 套件，且 **DSM 7.0 或以上**
-- 2025 年起的 DSM 7.3+ 兼容策略要求客户端 **≥ 4.0.0** 才能连接——所以本工具默认装 4.0.x 是对的，回退版本 `4.0.2-17889` 也满足此下限
-
-> 官方规格表把 Windows 最低要求写成 **Windows 10 2004+**，并未列出 Win7——这正是本项目存在的原因（靠 VxKex 绕过官方限制）。
-
----
-
-## 不会做的事
-
-- ❌ 静默安装（所有安装程序都需要用户确认）
-- ❌ 写 `HKLM\Run` 启动项（自启动用 `HKCU\Run` 或启动文件夹）
-- ❌ 创建计划任务
-- ❌ 上传 / 收集任何数据
-- ❌ 删除或替换任何系统文件
-- ❌ 自动写入 VxKex 注册表（避免被杀软拦截）
-
-> 透明起见，本工具**确会**做的系统改动：按需配置开机自启动、**启用系统 TLS 1.2**（为能从 GitHub/群晖下载）、必要时启用并重启系统自带的 BITS 服务。均为正常运行所需且公开可见。
-
-### 关于「启用系统 TLS 1.2」
-
-Win7 出厂时 **TLS 1.2 是关闭的**，这正是它连不上 GitHub / 群晖的根因（BITS 会报 `安全频道支持出错`）。脚本会打开这三处——**只"开"新协议，不关闭/不削弱任何现有协议**，这是[微软官方推荐](https://support.microsoft.com/en-us/topic/update-to-enable-tls-1-1-and-tls-1-2-as-default-secure-protocols-in-winhttp-in-windows-c4bd73d2-31d7-761e-0178-11268bb10392)的安全增强，随时可删值改回：
-
-| 层 | 注册表 | 值 |
+| 模式 | 用途 | 权限与副作用 |
 |---|---|---|
-| SCHANNEL（系统协议层） | `...\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\|1.2\Client` | `Enabled=1`, `DisabledByDefault=0` |
-| WinHTTP（BITS 走这层） | `...\Internet Settings\WinHttp` | `DefaultSecureProtocols=0xA00` |
-| .NET | `...\.NETFramework\v4.0.30319` | `SchUseStrongCrypto=1` |
+| `CheckOnly`（默认） | 本机与缓存只读检查 | 普通用户；不联网下载、不启动程序、不创建缓存/日志 |
+| `DownloadOnly` | 在能访问上游的 Windows 准备机获取两个固定安装包 | 普通用户；只写缓存；不安装 |
+| `Install` | 在隔离 Win7 SP1 测试机安装并检查预期版本 | 管理员；启动明确确认过的安装器；可能有上游安装器系统改动 |
 
-> ⚠️ WinHTTP 那层**需要 [KB3140245](https://www.catalog.update.microsoft.com/Search.aspx?q=KB3140245)** 才生效（脚本会自动检测并提示）。SCHANNEL 改动通常**重启后**才完全生效——脚本会先重启 BITS 服务尝试免重启；若下载仍失败，重启电脑后重跑即可，或直接走离线方式。
+准备安装包：
 
----
+```powershell
+powershell.exe -NoProfile -File .\Install-SynologyDrive.ps1 -Mode DownloadOnly
+```
 
-## 致谢
+在另一台机器准备后，将完整仓库与 `downloads` 一起复制到测试机。先阅读 [验收与回退流程](docs/ACCEPTANCE.md)，再在测试机的管理员 Windows PowerShell 中执行：
 
-- 原始解决方案：[zhugh.com - 解决Windows 7无法使用Synology Drive Client](https://zhugh.com/synology/)
-- VxKex-NEXT：<https://github.com/YuZhouRen86/VxKex-NEXT>
+```powershell
+powershell.exe -NoProfile -File .\Install-SynologyDrive.ps1 -Mode Install -Offline
+```
 
----
+`-Offline` 禁止工具下载或查询发布 API，缓存缺失/不匹配就停止。Windows 的 Authenticode 验证仍可能尝试证书链/吊销查询，不能把这个开关理解为系统级断网；需要完全隔离时由测试环境限制网络，并记录签名验证结果。
 
-## License
+`-CacheDirectory` 可指定缓存目录。旧中文脚本名仍保留，参数转发到新入口；默认也只读。
 
-MIT — 仅打包整理脚本，被分发的 Synology Drive Client / VxKex-NEXT 各自遵循其原始许可证。
+## 固定版本与校验
+
+来源清单在 [config/installers.psd1](config/installers.psd1)。两套组件都固定版本、精确文件名、大小、SHA256 和官方 URL；运行时不追踪 `latest`，不按名称自动挑一个旧包或 Debug 包。
+
+| 组件 | 固定版本 | 精确大小 | 状态 |
+|---|---|---:|---|
+| Synology Drive Client x86 | 4.0.3-17892 | 71,342,576 字节 | 官方包哈希已核对；执行时要求 Windows 验证签名 Valid 且发布者为 Synology Inc. |
+| VxKex-NEXT Release | 1.2.3.2466 | 5,025,016 字节 | 与上游 asset digest 一致；没有嵌入签名；Win7 配对验收待完成 |
+
+固定哈希：
+
+```text
+Synology: a8cfce9ee1a1c6705b28c013d5ab92029e499c34f6d8142dcb69f4d8e124c4a4
+VxKex:    e8fa07f6919f48bd3c381dedcbd54dabc147c824522f1ac2a8fc60366f43f535
+```
+
+这些值依据 2026-11-16 从指定上游取得的样本。哈希一致只证明字节与这个基准相同，不证明上游、构建过程或文件行为安全。该组合仍标为 `PendingWin7Validation`。
+
+缓存、下载、手工导入均使用同一套大小与哈希检查。传输先写独立 `.part` 文件，验证后才提交到目标文件；异常残留会清理。校验失败立即停止，不降低标准后换源重试。在线模式可以用验证通过的新包替换错误缓存；离线模式直接拒绝，不能因名字相同而放行。
+
+安装时先将两个包复制到仅 Administrators/SYSTEM 可写的临时目录，并在任何安装器启动前验证两个包的身份和签名策略。每个安装器启动前再次校验，运行期间保留禁止写入/删除共享的文件句柄。这个机制不能防住已经控制管理员账号的攻击者；真实 Win7 安装器与文件锁的兼容性仍需验收。
+
+升级必须一起更新清单中的版本、URL、文件名、大小、SHA256，并重新审阅安全公告和验收结果。不要通过清空 hash 或只改版本号升级/回退。固定版本也需要维护：4.0.3 的发布说明包含安全修复，不能仅凭旧版容易启动就退回 4.0.2。
+
+## 镜像与防护
+
+默认仅官方直连：已运行的 BITS 可用时先尝试 BITS，再尝试 `Invoke-WebRequest`。不会启动、重启或更改 BITS 配置。Web 请求仅在当前进程临时选择 TLS1.2，随后恢复原值；不会开启系统 TLS1.1 或重写 WinHTTP/SCHANNEL 注册表。
+
+GitHub 第三方代理默认关闭。确需使用时，可在准备机明确加 `-AllowGitHubMirror`；它只用于固定的 VxKex 资源，仍必须匹配清单 SHA256。代理不是上游发布者，也不能提供新的预期 hash。GitHub 不可达时，更建议用另一台机器获取官方包后离线复制。
+
+**遇到杀毒软件拦截就停止核查，不关闭实时防护，不给整个文件夹或 PowerShell 加排除。** 保存准确文件哈希、产品/引擎版本和告警，向安全软件厂商复核。源码公开或多个人都遇到同一告警，都不足以证明它是误报。
+
+VxKex 通过 IFEO/DLL 加载扩展兼容性。当前固定版本的源码还包含系统目录 DLL、免 UAC 提示的配置任务和登录后向 Explorer 注入 DLL 的逻辑。执行 `Install` 必须在看到这些说明后输入这一个 VxKex 包的完整 SHA256，确认只在隔离测试机上试验；确认不跨运行保存。此例外仅接受清单中的 VxKex 和 `NotSigned` 状态，不能绕过 `HashMismatch`、`NotTrusted`、其他发布者或未知版本。
+
+## 安装结果如何解释
+
+- 仅有目录不再被当成已经安装；查找确切程序与文件版本，VxKex 设置程序使用 `KexCfg.exe`。
+- 已有其他版本会停止，避免自动升级影响依赖同一兼容层的其他程序。
+- 非零失败码会阻断后续步骤；即使退出码为 0，找不到预期版本也算取消/未完成。
+- 遇到 3010/1641，标记需要重启并停止后续步骤；工具不主动重启。上游安装器本身的重启行为要实机确认。
+- 预期版本已存在只说明版本探测命中，不是已安装文件的完整安全审计。
+- 找到两个预期版本后，只提示继续配置和验收，不宣称部署成功。不自动启动同步客户端或创建自启项。
+
+`diagnose-launch.ps1` 是主动启动诊断，会尝试运行 Synology 客户端；`verify-autostart.ps1` 可在用户明确选择后修改快捷方式（默认跳过）。二者不属于只读预检，不能代替默认入口。
+
+## Win7 前置条件与常见问题
+
+测试基线为 Win7 SP1、Windows PowerShell 5.1，以及适用的官方系统更新。记录 SHA-2 支持、根证书和系统时间、UCRT、DLL 目录能力、平台更新、实际安全软件与 TLS 状态。累计更新可能替代旧 KB，不能只根据 `Get-HotFix` 缺一条编号就断言缺能力。
+
+- 缺 `api-ms-win-crt-*`：先核查微软 UCRT 更新（KB2999226 支持 Win7 SP1）及运行库；这与缺少更高版本 Windows API 是两类问题。
+- 下载 TLS 失败：工具不自动改全机安全策略。由管理员单独评估官方更新/设置，或使用离线分发。
+- 签名失败：区分无签名、文件修改、信任链/根证书、时间或吊销查询问题；不关闭证书验证。
+- 多个安装版本或已安装不同 VxKex：停止自动流程，先评估其他应用依赖和迁移/回退。
+
+## 开发验证
+
+```powershell
+./tests/download-validation.ps1
+./tests/safety-contracts.ps1
+# 仅 Windows PowerShell 5.1：只运行 CheckOnly 与缺缓存的 DownloadOnly -Offline
+./tests/entrypoint-checks.ps1
+```
+
+下载与安装编排测试只使用合成数据、模拟签名和模拟进程，不运行安装器或真实网络。CI 在 Windows PowerShell 5.1 和 PowerShell 7 执行回归与解析检查，再用 Windows PowerShell 5.1 检查真实只读入口。CI 成功不能替代 Win7 实机验收。
+
+## 资料
+
+- [验收、停止条件和回退记录](docs/ACCEPTANCE.md)
+- [本次改动与迁移说明](docs/CHANGE-NOTES.md)
+- [VxKex 固定 Release](https://github.com/YuZhouRen86/VxKex-NEXT/releases/tag/1.2.3.2466)
+- [VxKex 安装源码](https://github.com/YuZhouRen86/VxKex-NEXT/blob/52f59fea708c9df6691904ee430d9d64a057933f/KexSetup/perform.c)
+- [Synology 官方归档](https://archive.synology.com/download/Utility/SynologyDriveClient)
+- [微软 UCRT 更新](https://support.microsoft.com/en-gb/servicing/os/windows/2020/04/update-for-universal-c-runtime-in-windows)
+- [微软 TLS1.0/1.1 弃用说明](https://learn.microsoft.com/en-us/windows/win32/secauthn/tls-10-11-deprecation-in-windows)
+- [微软文件复核入口](https://www.microsoft.com/en-us/wdsi/filesubmission)

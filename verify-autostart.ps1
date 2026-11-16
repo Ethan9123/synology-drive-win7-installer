@@ -65,7 +65,7 @@ if ($synoExe) {
     Write-OK "已找到: $synoExe"
 } else {
     Write-Bad "未找到 SynologyDrive.exe"
-    Write-Info "请先运行 [一键安装.cmd] 完成 Synology Drive 安装"
+    Write-Info "请先按 README 的安装与验收流程完成 Synology Drive 安装"
     exit 1
 }
 
@@ -175,9 +175,9 @@ if ($runOK -or $shortcutOK) {
     Write-Host "    [2] 我自己去 Synology Drive 设置里勾选自启动" -ForegroundColor Yellow
     Write-Host "    [3] 不需要自启动, 退出" -ForegroundColor Yellow
     Write-Host ""
-    $choice = Read-Host "请输入选择 (1/2/3, 默认 1)"
+    $choice = Read-Host "请输入选择 (1/2/3, 默认 3)"
     # PS2.0/.NET3.5 安全写法 (IsNullOrWhiteSpace 是 .NET4+)
-    if (-not $choice -or -not $choice.Trim()) { $choice = "1" }
+    if (-not $choice -or -not $choice.Trim()) { $choice = "3" }
 
     switch ($choice) {
         "1" {

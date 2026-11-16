@@ -117,7 +117,7 @@ if (-not $synoExe) {
 }
 
 if (-not $synoExe) {
-    Write-Bad "未找到 SynologyDrive.exe — 请先运行 一键安装.cmd 完成安装"
+    Write-Bad "未找到 SynologyDrive.exe — 请按 README 的安装与验收流程操作"
     Read-Host "按回车退出" | Out-Null
     exit 1
 }
@@ -159,7 +159,7 @@ if ($vxkexInstalled) {
     Write-OK "VxKex-NEXT 已安装"
 } elseif ($isWin7) {
     Write-Bad "未检测到 VxKex-NEXT — 这是 Win7 上启动失败最常见原因"
-    Write-Info "请运行 一键安装.cmd 安装 VxKex, 或从开始菜单确认是否已装"
+    Write-Info "请按 README 的安装流程处理 VxKex, 或从开始菜单确认是否已装"
 } else {
     Write-Info "非 Win7, 跳过 VxKex 检查"
 }
@@ -271,8 +271,8 @@ if ($launchedOK -and -not $ifeoProblem) {
 
     $n = 1
     if ($isWin7 -and -not $vxkexInstalled) {
-        Write-Host "  $n. [根因] VxKex-NEXT 没装。Win7 缺它必然报缺少 api-ms-win-crt-*.dll" -ForegroundColor Yellow
-        Write-Info "     -> 运行 一键安装.cmd 安装 VxKex"
+        Write-Host "  $n. [根因] VxKex-NEXT 没装。Win7 上缺少兼容层可能导致新 API 不可用；UCRT 缺失需另查官方更新" -ForegroundColor Yellow
+        Write-Info "     -> 按 README 的安装与验收流程处理 VxKex；默认入口只做检查"
         $n++
     }
     if ($ifeoProblem) {
@@ -289,7 +289,7 @@ if ($launchedOK -and -not $ifeoProblem) {
         Write-Info "     a) 在 VxKex 里给 SynologyDrive.exe 开启 'Windows 10' 版本伪装"
         Write-Info "        (右键 exe -> Properties -> VxKex 标签 -> Strong version spoofing)"
         Write-Info "     b) 重启电脑后再试 (IFEO 改动对已缓存进程不立即生效)"
-        Write-Info "     c) 回退到实测稳妥的版本: 改 安装脚本 的 `$synoVersion = 4.0.2-17889"
+        Write-Info "     c) 不要只改版本号回退；先检查 config/installers.psd1 与安全修复、验收记录"
         Write-Info "     d) 确认装的是 x86 (32位) 而不是 x64"
         $n++
     }
