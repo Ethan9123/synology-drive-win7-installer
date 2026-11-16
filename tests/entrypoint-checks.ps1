@@ -20,3 +20,6 @@ try {
 } finally {
     if (Test-Path -LiteralPath $cache) { Remove-Item -LiteralPath $cache -Recurse -Force }
 }
+# GitHub's PowerShell wrapper propagates LASTEXITCODE. The deliberately failing
+# offline child was already asserted above; it must not become this suite's exit code.
+exit 0
